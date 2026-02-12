@@ -19,6 +19,9 @@ declare global {
         onStatus: (
           cb: (s: { running: boolean; port?: number }) => void,
         ) => () => void;
+        getLocalIPv4s: () => Promise<string[]>;
+        onDevice: (cb: (f: any) => void) => () => void;
+        getConnectedIps: () => Promise<string[]>;
       };
     };
   }

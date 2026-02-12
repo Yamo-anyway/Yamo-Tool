@@ -31,7 +31,9 @@ const PM100_SETUP_CHANNELS = {
   start: "pm100setup:start",
   stop: "pm100setup:stop",
   status: "pm100setup:status",
-  log: "pm100setup:log"
+  log: "pm100setup:log",
+  getLocalIPv4s: "pm100setup:getLocalIPv4s",
+  getConnectedIps: "pm100setup:getConnectedIps"
 };
 const pm100setupApi = {
   startServer: (port, host) => electron.ipcRenderer.invoke(PM100_SETUP_CHANNELS.start, port, host),
@@ -46,7 +48,14 @@ const pm100setupApi = {
     const handler = (_, s) => cb(s);
     electron.ipcRenderer.on(PM100_SETUP_CHANNELS.status, handler);
     return () => electron.ipcRenderer.removeListener(PM100_SETUP_CHANNELS.status, handler);
-  }
+  },
+  getLocalIPv4s: () => electron.ipcRenderer.invoke(PM100_SETUP_CHANNELS.getLocalIPv4s),
+  onDevice: (cb) => {
+    const handler = (_, f) => cb(f);
+    electron.ipcRenderer.on("pm100setup:device", handler);
+    return () => electron.ipcRenderer.removeListener("pm100setup:device", handler);
+  },
+  getConnectedIps: () => electron.ipcRenderer.invoke(PM100_SETUP_CHANNELS.getConnectedIps)
 };
 electron.contextBridge.exposeInMainWorld("api", {
   pm100: createPM100PreloadApi(),

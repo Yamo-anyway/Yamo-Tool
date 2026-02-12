@@ -19,4 +19,15 @@ export const pm100setupApi = {
     return () =>
       ipcRenderer.removeListener(PM100_SETUP_CHANNELS.status, handler);
   },
+
+  getLocalIPv4s: () => ipcRenderer.invoke(PM100_SETUP_CHANNELS.getLocalIPv4s),
+
+  onDevice: (cb: (f: any) => void) => {
+    const handler = (_: any, f: any) => cb(f);
+    ipcRenderer.on("pm100setup:device", handler);
+    return () => ipcRenderer.removeListener("pm100setup:device", handler);
+  },
+
+  getConnectedIps: () =>
+    ipcRenderer.invoke(PM100_SETUP_CHANNELS.getConnectedIps),
 };

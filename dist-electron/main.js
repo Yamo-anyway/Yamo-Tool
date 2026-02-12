@@ -14,7 +14,7 @@ const PM100_CHANNELS = {
 };
 const PM100_PORT = 1500;
 const SEARCH_MASK = "255.255.255.0";
-function xorChecksum(buf) {
+function xorChecksum$1(buf) {
   let x = 0;
   for (const b of buf) x ^= b;
   return x & 255;
@@ -34,11 +34,11 @@ function buildDiscoveryPacket() {
     0,
     0
   ]);
-  const cs = xorChecksum(body);
+  const cs = xorChecksum$1(body);
   return Buffer.concat([body, Buffer.from([cs])]);
 }
-function ipToU32(ip) {
-  const [a, b, c, d] = ip.split(".").map((x) => parseInt(x, 10));
+function ipToU32(ip2) {
+  const [a, b, c, d] = ip2.split(".").map((x) => parseInt(x, 10));
   return (a << 24 >>> 0 | b << 16 | c << 8 | d) >>> 0;
 }
 function u32ToIp(u) {
@@ -48,8 +48,8 @@ function u32ToIp(u) {
   const d = u & 255;
   return `${a}.${b}.${c}.${d}`;
 }
-function broadcastByMask(ip, mask) {
-  const ipU = ipToU32(ip);
+function broadcastByMask(ip2, mask) {
+  const ipU = ipToU32(ip2);
   const maskU = ipToU32(mask);
   const bcast = (ipU | ~maskU >>> 0) >>> 0;
   return u32ToIp(bcast);
@@ -80,12 +80,12 @@ function parsePM100Response(msg) {
   if (tag !== "CG_RES") return null;
   const mac = formatMac(msg, 6);
   const version = `${msg[13]}.${msg[14]}`;
-  const ip = formatIp(msg, 15);
+  const ip2 = formatIp(msg, 15);
   const serverIp = formatIp(msg, 19);
   const subnetMask = formatIp(msg, 27);
   const gateway = formatIp(msg, 31);
   const serverPort = msg.readUInt16BE(35);
-  return { mac, ip, serverIp, subnetMask, gateway, serverPort, version };
+  return { mac, ip: ip2, serverIp, subnetMask, gateway, serverPort, version };
 }
 class PM100Scanner {
   constructor(onLog, onUdp) {
@@ -241,95 +241,250 @@ function registerPM100DiscoveryMainIPC(getWin) {
     if (scanner) scanner.stop();
     return true;
   });
-  ipcMain.handle(PM100_CHANNELS.reset, (_evt, ip, mac) => {
+  ipcMain.handle(PM100_CHANNELS.reset, (_evt, ip2, mac) => {
     try {
-      ensureScanner().sendReset(ip, mac);
+      ensureScanner().sendReset(ip2, mac);
       return true;
     } catch (e) {
       return false;
     }
   });
 }
-function hasIp(ip) {
-  const nets = os.networkInterfaces();
-  for (const ifname of Object.keys(nets)) {
-    for (const a of nets[ifname] || []) {
-      const isV4 = a.family === "IPv4" || a.family === 4;
-      if (!isV4) continue;
-      if (a.internal) continue;
-      if (a.address === ip) return true;
+const FRAME_LEN = 36;
+function ip(buf, off) {
+  return `${buf[off]}.${buf[off + 1]}.${buf[off + 2]}.${buf[off + 3]}`;
+}
+function u16be(buf, off) {
+  return buf[off] << 8 | buf[off + 1];
+}
+function xorChecksum(buf) {
+  let x = 0;
+  for (let i = 0; i < buf.length - 1; i++) x ^= buf[i];
+  return x & 255;
+}
+function tryParseFrames(chunk) {
+  const frames = [];
+  let offset = 0;
+  while (offset + FRAME_LEN <= chunk.length) {
+    if (chunk[offset] !== 67 || // 'C'
+    chunk[offset + 1] !== 71 || // 'G'
+    chunk[offset + 2] !== 68 || // 'D'
+    chunk[offset + 3] !== 73 || // 'I'
+    chunk[offset + 4] !== 127) {
+      offset += 1;
+      continue;
     }
+    const frameBuf = chunk.slice(offset, offset + FRAME_LEN);
+    const expected = frameBuf[FRAME_LEN - 1];
+    const actual = xorChecksum(frameBuf);
+    if (expected !== actual) {
+      offset += 1;
+      continue;
+    }
+    const deviceIp = ip(frameBuf, 5);
+    const subnet = ip(frameBuf, 9);
+    const gateway = ip(frameBuf, 13);
+    const serverIp = ip(frameBuf, 17);
+    const serverPort = u16be(frameBuf, 21);
+    const sensorNcNo = [
+      frameBuf[23],
+      frameBuf[24],
+      frameBuf[25]
+    ];
+    const sensorEnable = [
+      frameBuf[26],
+      frameBuf[27],
+      frameBuf[28]
+    ];
+    const sensorCheckTime = [
+      frameBuf[29],
+      frameBuf[30],
+      frameBuf[31]
+    ];
+    const sensorStatus = [
+      frameBuf[32],
+      frameBuf[33],
+      frameBuf[34]
+    ];
+    frames.push({
+      deviceIp,
+      subnet,
+      gateway,
+      serverIp,
+      serverPort,
+      sensorNcNo,
+      sensorEnable,
+      sensorCheckTime,
+      sensorStatus,
+      raw: frameBuf
+    });
+    offset += FRAME_LEN;
   }
-  return false;
+  return { frames, rest: chunk.slice(offset) };
 }
 class PM100SetupServer {
-  constructor(onLog, onStatus) {
+  constructor(onLog, onStatus, onDeviceFrame) {
     this.onLog = onLog;
     this.onStatus = onStatus;
+    this.onDeviceFrame = onDeviceFrame;
   }
   server = null;
   port = null;
   host = null;
+  clients = /* @__PURE__ */ new Set();
+  stopping = null;
   start(port, host) {
-    if (this.server) return;
-    if (!hasIp(host)) {
-      this.onLog(`Start blocked in main: IP ${host} not found on this PC`);
-      this.onStatus({ running: false });
+    if (this.server) {
+      this.onLog(
+        `Start ignored: already running on ${this.host ?? "?"}:${this.port ?? "?"}`
+      );
       return;
     }
+    if (this.stopping) {
+      this.onLog("Start ignored: server is stopping (wait close)");
+      return;
+    }
+    this.onLog(`Server start requested: ${host}:${port}`);
     const server2 = net.createServer((sock) => {
+      this.clients.add(sock);
       this.onLog(`Client connected: ${sock.remoteAddress}:${sock.remotePort}`);
+      let carry = Buffer.alloc(0);
       sock.on("data", (buf) => {
-        this.onLog(
-          `RX ${buf.length} bytes from ${sock.remoteAddress}:${sock.remotePort}`
-        );
+        this.onLog(`RAW RX ${buf.length} bytes`);
+        carry = Buffer.concat([carry, buf]);
+        const { frames, rest } = tryParseFrames(carry);
+        carry = rest;
+        for (const f of frames) this.onDeviceFrame(f);
       });
       sock.on("close", () => {
+        this.clients.delete(sock);
         this.onLog(
           `Client disconnected: ${sock.remoteAddress}:${sock.remotePort}`
         );
+        this.onStatus({
+          running: true,
+          port: this.port ?? void 0,
+          host: this.host ?? void 0
+        });
       });
-      sock.on("error", (e) => {
-        this.onLog(`Client error: ${e.message}`);
+      sock.on("error", (e) => this.onLog(`Client error: ${e.message}`));
+      sock.setKeepAlive(true, 5e3);
+      sock.setTimeout(3e3);
+      sock.on("timeout", () => {
+        this.onLog(
+          `Socket timeout -> ${sock.remoteAddress}:${sock.remotePort}`
+        );
+        sock.destroy();
       });
     });
     server2.on("error", (e) => {
-      this.onLog(`Server error: ${e.message ?? e}`);
-      this.stop();
+      this.onLog(`Server error: ${e?.message ?? e}`);
+      try {
+        server2.close();
+      } catch {
+      }
+      this.server = null;
+      this.port = null;
+      this.host = null;
+      this.onStatus({ running: false });
     });
-    server2.listen(port, host, () => {
+    server2.listen(port, "0.0.0.0", () => {
       this.server = server2;
       this.port = port;
       this.host = host;
-      this.onLog(`Server started: ${host}:${port}`);
-      this.onStatus({ running: true, port });
+      this.onLog(
+        `Server listening on 0.0.0.0:${port} (requested host=${host})`
+      );
+      this.onStatus({ running: true, port, host });
     });
   }
-  stop() {
-    if (!this.server) return;
+  // ✅ Stop을 완료까지 기다릴 수 있게
+  async stopAsync() {
+    if (this.stopping) return this.stopping;
+    if (!this.server) {
+      this.onLog("Stop ignored: server not running");
+      this.onStatus({ running: false });
+      return;
+    }
+    this.onLog("Server stop requested");
     const s = this.server;
-    this.server = null;
-    try {
-      s.close(() => {
+    this.stopping = new Promise((resolve) => {
+      for (const sock of this.clients) {
+        try {
+          sock.end();
+          setTimeout(() => {
+            try {
+              sock.destroy();
+            } catch {
+            }
+          }, 500);
+        } catch {
+        }
+      }
+      this.clients.clear();
+      try {
+        s.close(() => {
+          this.server = null;
+          this.port = null;
+          this.host = null;
+          this.onLog("Server stopped");
+          this.onStatus({ running: false });
+          const done = this.stopping;
+          this.stopping = null;
+          resolve();
+        });
+      } catch {
+        this.server = null;
+        this.port = null;
+        this.host = null;
         this.onLog("Server stopped");
         this.onStatus({ running: false });
-      });
-    } catch {
-      this.onLog("Server stopped");
-      this.onStatus({ running: false });
-    }
+        this.stopping = null;
+        resolve();
+      }
+    });
+    return this.stopping;
   }
   status() {
-    return { running: !!this.server, port: this.port ?? void 0 };
+    return {
+      running: !!this.server,
+      port: this.port ?? void 0,
+      host: this.host ?? void 0
+    };
+  }
+  getConnectedIps() {
+    const ips = /* @__PURE__ */ new Set();
+    for (const s of this.clients) {
+      const ra = s.remoteAddress ?? "";
+      const ip2 = ra.startsWith("::ffff:") ? ra.slice(7) : ra;
+      if (ip2) ips.add(ip2);
+    }
+    return Array.from(ips);
   }
 }
 const PM100_SETUP_CHANNELS = {
   start: "pm100setup:start",
   stop: "pm100setup:stop",
   status: "pm100setup:status",
-  log: "pm100setup:log"
+  log: "pm100setup:log",
+  getLocalIPv4s: "pm100setup:getLocalIPv4s",
+  device: "pm100setup:device",
+  getConnectedIps: "pm100setup:getConnectedIps"
 };
 let server = null;
+function getLocalIPv4s() {
+  const nets = os.networkInterfaces();
+  const ips = /* @__PURE__ */ new Set();
+  for (const ifname of Object.keys(nets)) {
+    for (const a of nets[ifname] || []) {
+      const isV4 = a.family === "IPv4" || a.family === 4;
+      if (!isV4) continue;
+      if (a.internal) continue;
+      ips.add(a.address);
+    }
+  }
+  return Array.from(ips);
+}
 function getWC(getWin) {
   const w = getWin();
   if (!w) throw new Error("Window not ready");
@@ -343,20 +498,37 @@ function registerPM100SetupMainIPC(getWin) {
       if (!server) {
         server = new PM100SetupServer(
           (line) => wc.send(PM100_SETUP_CHANNELS.log, line),
-          (s) => wc.send(PM100_SETUP_CHANNELS.status, s)
+          (s) => wc.send(PM100_SETUP_CHANNELS.status, s),
+          (f) => wc.send(PM100_SETUP_CHANNELS.device, f)
         );
       }
       server.start(port, host);
       return true;
     }
   );
-  ipcMain.handle(PM100_SETUP_CHANNELS.stop, () => {
-    if (server) server.stop();
+  ipcMain.handle(PM100_SETUP_CHANNELS.stop, async () => {
+    if (server) {
+      if (server) await server.stopAsync();
+    }
+    const wc = getWC(getWin);
+    wc.send(PM100_SETUP_CHANNELS.status, { running: false });
     return true;
   });
   ipcMain.handle(PM100_SETUP_CHANNELS.status, () => {
     return server ? server.status() : { running: false };
   });
+  ipcMain.handle(PM100_SETUP_CHANNELS.getLocalIPv4s, () => {
+    return getLocalIPv4s();
+  });
+  ipcMain.handle(PM100_SETUP_CHANNELS.getConnectedIps, () => {
+    return server ? server.getConnectedIps() : [];
+  });
+}
+function stopPM100SetupServer() {
+  if (server) {
+    server.stopAsync();
+    server = null;
+  }
 }
 const __filename$1 = fileURLToPath(import.meta.url);
 const __dirname$1 = path.dirname(__filename$1);
@@ -370,7 +542,9 @@ function createWindow() {
       preload: path.join(__dirname$1, "preload.mjs")
     }
   });
-  win.webContents.openDevTools();
+  win.on("close", () => {
+    stopPM100SetupServer();
+  });
   const devUrl = process.env.VITE_DEV_SERVER_URL;
   if (devUrl) win.loadURL(devUrl);
   else win.loadFile(path.join(process.cwd(), "index.html"));
@@ -385,4 +559,10 @@ app.whenReady().then(() => {
 });
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
+});
+app.on("before-quit", () => {
+  stopPM100SetupServer();
+});
+process.on("uncaughtException", (err) => {
+  console.error("MAIN CRASH:", err);
 });

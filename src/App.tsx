@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from "react";
 import Launcher from "./Launcher";
-import PM100Discovery from "./PM100Discovery/PM100Discovery";
-import PM100Setup from "./PM100Setup/PM100Setup";
+import PM100Discovery from "./PM100Discovery";
+import PM100Setup from "./PM100Setup";
+// import PM100Setup from "./PM100Setup/PM100Setup";
 
 export default function App() {
   const [hash, setHash] = useState(window.location.hash || "#/");

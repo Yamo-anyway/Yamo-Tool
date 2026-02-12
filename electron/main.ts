@@ -3,6 +3,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { registerPM100DiscoveryMainIPC } from "./PM100Discovery/ipcMain";
 import { registerPM100SetupMainIPC } from "./PM100Setup/ipcMain";
+import { stopPM100SetupServer } from "./PM100Setup/ipcMain";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -19,7 +20,9 @@ function createWindow() {
     },
   });
 
-  win.webContents.openDevTools(); // ✅ 이 줄 추가
+  win.on("close", () => {
+    stopPM100SetupServer(); // ✅ 창 닫기 전에 서버 종료
+  });
 
   const devUrl = process.env.VITE_DEV_SERVER_URL;
   if (devUrl) win.loadURL(devUrl);
@@ -39,4 +42,12 @@ app.whenReady().then(() => {
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
+});
+
+app.on("before-quit", () => {
+  stopPM100SetupServer();
+});
+
+process.on("uncaughtException", (err) => {
+  console.error("MAIN CRASH:", err);
 });
