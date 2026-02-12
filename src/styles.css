@@ -1,0 +1,109 @@
+body {
+  margin: 0;
+  background: #0f1220;
+  color: #e9ecff;
+  font-family:
+    system-ui,
+    -apple-system;
+}
+
+.launcher {
+  padding: 20px;
+}
+
+.header {
+  margin-bottom: 14px;
+}
+
+.title {
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.sub {
+  margin-top: 6px;
+  font-size: 12px;
+  opacity: 0.8;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 16px;
+}
+
+.tile {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
+  padding: 14px 10px;
+  text-align: center;
+}
+
+.icon {
+  width: 64px;
+  height: 64px;
+  display: block;
+  margin: 0 auto 10px auto;
+}
+
+.label {
+  font-size: 12px;
+  opacity: 0.9;
+}
+
+.tileDisabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  transform: none !important;
+}
+
+.pmToolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 12px 0;
+}
+
+.pmBtn {
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.1);
+  color: #e9ecff;
+  border-radius: 10px;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+
+.pmBtn:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.pmBtn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.pmBtnGhost {
+  background: transparent;
+}
+
+.pmStatus {
+  margin-left: auto;
+  font-size: 12px;
+  opacity: 0.85;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pmDot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  display: inline-block;
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.pmDotOn {
+  background: #4a6cff;
+}

@@ -1,0 +1,237 @@
+/* ===== Root Layout ===== */
+
+.discovery {
+  height: 100vh;
+  width: 100%;
+  box-sizing: border-box;
+
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+
+  overflow: hidden; /* 전체 스크롤 제거 */
+}
+
+/* ===== Header ===== */
+
+.discoveryHeader {
+  display: flex;
+  align-items: center;
+}
+
+/* ===== Toolbar ===== */
+
+.pmToolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+/* ===== Log Area ===== */
+
+.logWrapper {
+  margin-top: 20px; /* 아래로 밀기 */
+  margin-bottom: 30px; /* 🔥 하단에서 20px 더 올림 */
+  height: 40%;
+  max-height: 300px;
+  display: flex;
+}
+
+.logArea {
+  width: 100%;
+  height: 100%;
+  resize: none;
+
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(0, 0, 0, 0.25);
+  color: #e9ecff;
+
+  padding: 12px;
+  outline: none;
+
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas;
+  font-size: 13px;
+  line-height: 1.4;
+
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* ===== Back Button ===== */
+
+.backBtn {
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.06);
+  color: #e9ecff;
+  border-radius: 10px;
+  padding: 8px 10px;
+  cursor: pointer;
+}
+
+.backBtn:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+/* ===== Toolbar ===== */
+
+.pmToolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* 버튼 기본 */
+.pmBtn {
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.08);
+  color: #e9ecff;
+  border-radius: 8px;
+  padding: 8px 14px;
+  cursor: pointer;
+  transition: 0.15s;
+}
+
+.pmBtn:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.pmBtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Primary 버튼 */
+.pmBtn.primary {
+  background: #4a6cff;
+  border: none;
+}
+
+.pmBtn.primary:hover {
+  background: #5d7dff;
+}
+
+/* Ghost 버튼 */
+.pmBtn.ghost {
+  background: transparent;
+}
+
+/* 상태 표시 */
+.pmStatus {
+  margin-left: auto;
+  font-size: 12px;
+  opacity: 0.85;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.dot.on {
+  background: #4a6cff;
+}
+
+.pmCount {
+  opacity: 0.8;
+  margin-left: 4px;
+}
+
+/* 리스트 영역(로그 위) */
+.listWrapper {
+  margin-top: 16px;
+  flex: 1; /* ✅ 로그와 함께 세로 공간 분배 */
+  min-height: 0; /* ✅ 내부 스크롤을 위해 중요 */
+  display: flex;
+  flex-direction: column;
+}
+
+.listHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.listTitle {
+  font-size: 13px;
+  font-weight: 600;
+  opacity: 0.9;
+}
+
+/* 테이블 스크롤(필요 시) */
+.tableWrap {
+  flex: 1;
+  min-height: 0;
+  overflow: auto; /* ✅ rows 많으면 여기만 스크롤 */
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+/* 테이블 */
+.deviceTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.deviceTable thead th {
+  position: sticky;
+  top: 0;
+  background: rgba(0, 0, 0, 0.35);
+  text-align: left;
+  padding: 8px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  font-weight: 600;
+}
+
+.deviceTable tbody td {
+  padding: 6px 10px; /* ✅ 세로 간격 줄임 */
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  opacity: 0.95;
+}
+
+.deviceTable tbody tr:hover td {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas;
+}
+
+.emptyCell {
+  padding: 16px 10px;
+  opacity: 0.65;
+}
+
+/* 로그 영역은 “아래 고정 + 높이 제한” 유지 (네가 이미 40px로 조절한 값 유지) */
+
+.deviceTable tbody tr {
+  cursor: pointer;
+}
+
+.rowSelected td {
+  background: rgba(74, 108, 255, 0.22);
+}
+
+.topBar {
+  display: flex;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.ipSelect {
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.06);
+  color: #e9ecff;
+  border-radius: 8px;
+  padding: 8px 10px;
+  outline: none;
+}
