@@ -234,14 +234,14 @@ export default function PM100Discovery() {
         >
           Scan
         </button>
-        <button className="pmBtn" onClick={onStop} disabled={!isScanning}>
+        <button className="pmBtn stop" onClick={onStop} disabled={!isScanning}>
           Stop
         </button>
-        <button className="pmBtn ghost" onClick={onClearLog}>
+        <button className="pmBtn primary" onClick={onClearLog}>
           Clear Log
         </button>
         <button
-          className="pmBtn ghost"
+          className="pmBtn primary"
           onClick={onClearList}
           disabled={devices.length === 0}
         >
@@ -249,7 +249,7 @@ export default function PM100Discovery() {
         </button>
 
         <button
-          className="pmBtn ghost"
+          className="pmBtn primary"
           onMouseDown={(e) => e.stopPropagation()} // ✅ 중요
           style={{ marginLeft: 10 }}
           onClick={onResetDevice}

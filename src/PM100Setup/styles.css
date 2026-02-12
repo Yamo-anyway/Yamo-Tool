@@ -1,63 +1,115 @@
-/* src/PM100Setup/styles.css */
-
-.setupRoot {
+/* ===== Root Layout ===== */
+.pmSetupRoot {
   height: 100vh;
+  width: 100%;
   box-sizing: border-box;
+
   padding: 20px;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+
+  overflow: hidden; /* 전체 스크롤 제거 */
 }
 
-.topBar {
+/* ===== Top Bar ===== */
+.pmSetupTop {
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-bottom: 14px;
+  margin-bottom: 10px;
 }
 
+/* ===== Back Button (Discovery와 동일 톤) ===== */
 .backBtn {
-  padding: 8px 12px;
-  border-radius: 10px;
-  border: 1px solid #ddd;
-  background: #fff;
+  padding: 8px 14px;
+  border-radius: 12px;
+  border: 1px solid #e5e5e5;
+  background: #f9f9f9;
+  color: #333;
+  font-size: 14px;
   cursor: pointer;
+  transition: none;
 }
 
-.serverControls {
+.backBtn:hover {
+  background: #f9f9f9;
+  border-color: #e5e5e5;
+}
+
+.backBtn:active {
+  background: #f0f0f0;
+}
+
+/* ===== Controls ===== */
+.pmSetupControls {
+  flex: 1;
+  min-width: 0;
   display: flex;
   align-items: center;
-  gap: 10px;
-  flex: 1;
+  gap: 12px;
+}
+
+/* 포트 영역 */
+.portGroup {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .portLabel {
   font-size: 12px;
-  opacity: 0.8;
+  opacity: 0.85;
+  color: #e9ecff;
+  white-space: nowrap;
 }
 
 .portInput {
   width: 110px;
   padding: 8px 10px;
   border-radius: 10px;
-  border: 1px solid #ddd;
+
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.06);
+  color: #e9ecff;
+
   outline: none;
 }
 
+.portInput:disabled {
+  opacity: 0.6;
+}
+
+/* ===== Buttons (Discovery와 동일) ===== */
 .pmBtn {
-  padding: 8px 12px;
-  border-radius: 10px;
-  border: 1px solid #ddd;
+  padding: 8px 14px;
+  border-radius: 12px;
+  border: 1px solid #e5e5e5;
+  background: #f9f9f9;
+  color: #333;
+  font-size: 14px;
   cursor: pointer;
-  background: #fff;
+}
+
+.pmBtn:hover {
+  background: #f2f2f2;
 }
 
 .pmBtn.primary {
-  border-color: #cfe0ff;
+  background: #e9f2ff;
+  border-color: #bcd6ff;
+}
+
+.pmBtn.primary:hover {
+  background: #dceaff;
 }
 
 .pmBtn.danger {
-  border-color: #ffd0d0;
+  background: #ffeaea;
+  border-color: #ffcaca;
+}
+
+.pmBtn.danger:hover {
+  background: #ffdede;
 }
 
 .pmBtn:disabled {
@@ -65,83 +117,122 @@
   cursor: not-allowed;
 }
 
-.serverHint {
-  margin-left: 6px;
+/* 힌트 */
+.pmSetupHint {
   font-size: 12px;
-  opacity: 0.75;
+  opacity: 0.85;
+  color: #e9ecff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ===== Body Layout ===== */
+.pmSetupBody {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* 패널(리스트/로그) 높이: Discovery보다 작게 */
+.pmSetupPanel {
+  flex: 0 0 22vh;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* 패널 헤더 */
+.pmSetupPanelHeader {
+  font-size: 12px;
+  opacity: 0.85;
+  color: #e9ecff;
+}
+
+/* 리스트 박스(Discovery tableWrap 느낌) */
+.pmSetupPanelBox {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+/* 테이블 */
+.pmSetupTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  table-layout: fixed;
+}
+
+.pmSetupTable thead th {
+  position: sticky;
+  top: 0;
+  background: rgba(0, 0, 0, 0.35);
+  text-align: left;
+  padding: 8px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  font-weight: 600;
+  color: #e9ecff;
+}
+
+.pmSetupTable tbody td {
+  padding: 6px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  opacity: 0.95;
+  color: #e9ecff;
+
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.miniListWrap {
-  flex: 0 0 22vh; /* ✅ Discovery 대비 줄인 높이 */
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  overflow: hidden;
+.pmSetupTable tbody tr:hover td {
+  background: rgba(255, 255, 255, 0.06);
 }
 
-.miniTableTitle {
-  font-size: 12px;
-  opacity: 0.8;
-}
-
-.miniTableBox {
+/* 가운데 비움 */
+.pmSetupSpacer {
   flex: 1;
-  border: 1px solid #eee;
-  border-radius: 12px;
-  overflow: auto;
 }
 
-.miniTable {
+/* ===== Log Area (Discovery logArea 톤) ===== */
+.pmSetupLog {
+  flex: 1;
   width: 100%;
-  border-collapse: collapse;
-}
+  min-height: 0;
+  resize: none;
 
-.miniTable th,
-.miniTable td {
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(0, 0, 0, 0.25);
+  color: #e9ecff;
+
+  padding: 12px;
+  outline: none;
+
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas;
   font-size: 13px;
-  padding: 6px 10px; /* ✅ 세로 간격 작게 */
-  border-bottom: 1px solid #f2f2f2;
+  line-height: 1.4;
+
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
+/* 공통 */
 .emptyCell {
   text-align: center;
-  padding: 18px 0;
-  opacity: 0.6;
+  padding: 16px 10px;
+  opacity: 0.65;
+  color: #e9ecff;
 }
 
 .mono {
-  font-family:
-    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
-    "Courier New", monospace;
-}
-
-.middleSpace {
-  flex: 1; /* ✅ 가운데 비움 */
-}
-
-.miniLogWrap {
-  flex: 0 0 22vh; /* ✅ Discovery 대비 줄인 높이 */
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  overflow: hidden;
-}
-
-.miniLogTitle {
-  font-size: 12px;
-  opacity: 0.8;
-}
-
-.miniLogArea {
-  flex: 1;
-  width: 100%;
-  resize: none;
-  border-radius: 12px;
-  border: 1px solid #eee;
-  padding: 10px;
-  box-sizing: border-box;
-  outline: none;
-  overflow: auto;
-  line-height: 1.35;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas;
 }

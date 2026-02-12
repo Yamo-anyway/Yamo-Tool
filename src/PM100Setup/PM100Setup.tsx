@@ -1,4 +1,3 @@
-// src/PM100Setup/PM100Setup.tsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import "./styles.css";
 
@@ -10,7 +9,7 @@ type Row = {
 
 export default function PM100Setup() {
   const [log, setLog] = useState("");
-  const [rows, setRows] = useState<Row[]>([]);
+  const [rows] = useState<Row[]>([]);
   const [port, setPort] = useState<number>(9002);
 
   const [localIps, setLocalIps] = useState<string[]>([]);
@@ -28,7 +27,6 @@ export default function PM100Setup() {
     setLog((prev) => (prev ? `${prev}\n[${ts}] ${line}` : `[${ts}] ${line}`));
   };
 
-  // ✅ 로컬 IP 수집 (기존 pm100 API 재사용)
   useEffect(() => {
     (async () => {
       try {
@@ -42,7 +40,6 @@ export default function PM100Setup() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ✅ 서버 로그/상태 구독
   useEffect(() => {
     const offLog = window.api.pm100setup.onLog((line: string) =>
       appendLog(line),
@@ -53,7 +50,6 @@ export default function PM100Setup() {
         if (typeof s.port === "number") setPort(s.port);
       },
     );
-
     return () => {
       offLog?.();
       offStatus?.();
@@ -61,18 +57,15 @@ export default function PM100Setup() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ✅ 로그 자동 스크롤
   useEffect(() => {
-    if (textAreaRef.current) {
+    if (textAreaRef.current)
       textAreaRef.current.scrollTop = textAreaRef.current.scrollHeight;
-    }
   }, [log]);
 
   const hasRequiredIp = useMemo(
     () => localIps.includes("192.168.1.100"),
     [localIps],
   );
-
   const canStart =
     !isServerRunning && hasRequiredIp && port >= 1 && port <= 65535;
 
@@ -86,31 +79,23 @@ export default function PM100Setup() {
         );
         return;
       }
-      try {
-        await window.api.pm100setup.startServer(port, "192.168.1.100");
-        appendLog(`Server start requested on 192.168.1.100:${port}`);
-      } catch (err: any) {
-        appendLog(`Server start error: ${err?.message ?? err}`);
-      }
+      await window.api.pm100setup.startServer(port, "192.168.1.100");
+      appendLog(`Server start requested on 192.168.1.100:${port}`);
     } else {
-      try {
-        await window.api.pm100setup.stopServer();
-        appendLog("Server stop requested");
-      } catch (err: any) {
-        appendLog(`Server stop error: ${err?.message ?? err}`);
-      }
+      await window.api.pm100setup.stopServer();
+      appendLog("Server stop requested");
     }
   };
 
-  // (지금은 “리스트/로그 레이아웃만” 먼저. rows는 추후 채움)
   const sorted = useMemo(
     () => [...rows].sort((a, b) => b.lastSeenAt - a.lastSeenAt),
     [rows],
   );
 
   return (
-    <div className="setupRoot">
-      <div className="topBar">
+    <div className="pmSetupRoot">
+      {/* Top bar */}
+      <div className="pmSetupTop">
         <button
           className="backBtn"
           onMouseDown={(e) => e.stopPropagation()}
@@ -120,88 +105,83 @@ export default function PM100Setup() {
         </button>
 
         <div
-          className="serverControls"
+          className="pmSetupControls"
           onMouseDown={(e) => e.stopPropagation()}
         >
-          <label className="portLabel">Server Port</label>
-
-          <input
-            className="portInput"
-            type="number"
-            value={port}
-            min={1}
-            max={65535}
-            disabled={isServerRunning}
-            onChange={(e) => setPort(Number(e.target.value))}
-          />
+          <div className="portGroup">
+            <div className="portLabel">Server Port</div>
+            <input
+              className="portInput"
+              type="number"
+              value={port}
+              min={1}
+              max={65535}
+              disabled={isServerRunning}
+              onChange={(e) => setPort(Number(e.target.value))}
+            />
+          </div>
 
           <button
             className={`pmBtn ${isServerRunning ? "danger" : "primary"}`}
             disabled={!isServerRunning && !canStart}
             onClick={onToggleServer}
-            title={
-              hasRequiredIp
-                ? isServerRunning
-                  ? "Stop TCP server"
-                  : "Start TCP server"
-                : "Start blocked: IP 192.168.1.100 is not on this PC"
-            }
           >
             {isServerRunning ? "Stop" : "Start"}
           </button>
 
-          <div className="serverHint">
-            {hasRequiredIp
-              ? "Required IP OK (192.168.1.100)"
-              : "IP mismatch: need 192.168.1.100"}
+          <div className={`pmSetupHint ${hasRequiredIp ? "ok" : "bad"}`}>
+            {hasRequiredIp ? "IP OK (192.168.1.100)" : "Need IP: 192.168.1.100"}
           </div>
         </div>
       </div>
 
-      {/* ✅ 위: 리스트(작게) */}
-      <div className="miniListWrap">
-        <div className="miniTableTitle">List</div>
-        <div className="miniTableBox">
-          <table className="miniTable">
-            <thead>
-              <tr>
-                <th>ID</th>
-                <th>Info</th>
-              </tr>
-            </thead>
-            <tbody>
-              {sorted.length === 0 ? (
+      {/* Body */}
+      <div className="pmSetupBody">
+        {/* List (top) */}
+        <section className="pmSetupPanel">
+          <div className="pmSetupPanelHeader">List</div>
+          <div className="pmSetupPanelBox">
+            <table className="pmSetupTable">
+              <thead>
                 <tr>
-                  <td className="emptyCell" colSpan={2}>
-                    (empty)
-                  </td>
+                  <th>ID</th>
+                  <th>Info</th>
                 </tr>
-              ) : (
-                sorted.map((r) => (
-                  <tr key={r.id}>
-                    <td className="mono">{r.id}</td>
-                    <td>{r.info}</td>
+              </thead>
+              <tbody>
+                {sorted.length === 0 ? (
+                  <tr>
+                    <td className="emptyCell" colSpan={2}>
+                      (empty)
+                    </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+                ) : (
+                  sorted.map((r) => (
+                    <tr key={r.id}>
+                      <td className="mono">{r.id}</td>
+                      <td>{r.info}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
 
-      {/* ✅ 중간: 비워둠 */}
-      <div className="middleSpace" />
+        {/* Middle spacer */}
+        <div className="pmSetupSpacer" />
 
-      {/* ✅ 아래: 로그(작게) */}
-      <div className="miniLogWrap">
-        <div className="miniLogTitle">Log</div>
-        <textarea
-          ref={textAreaRef}
-          className="miniLogArea"
-          value={log}
-          readOnly
-          placeholder="Logs..."
-        />
+        {/* Log (bottom) */}
+        <section className="pmSetupPanel">
+          <div className="pmSetupPanelHeader">Log</div>
+          <textarea
+            ref={textAreaRef}
+            className="pmSetupLog"
+            value={log}
+            readOnly
+            placeholder="Logs..."
+          />
+        </section>
       </div>
     </div>
   );

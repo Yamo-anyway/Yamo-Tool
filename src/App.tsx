@@ -13,13 +13,17 @@ export default function App() {
   }, []);
 
   const page = useMemo(() => {
-    const path = hash.replace("#", "");
+    const path = (hash || "#/").replace("#", "");
     if (path.startsWith("/pm100-discovery")) return "pm100-discovery";
     if (path.startsWith("/pm100-setup")) return "pm100-setup";
     return "launcher";
   }, [hash]);
 
-  if (page === "pm100-discovery") return <PM100Discovery />;
-  if (page === "pm100-setup") return <PM100Setup />;
-  return <Launcher />;
+  return page === "pm100-discovery" ? (
+    <PM100Discovery />
+  ) : page === "pm100-setup" ? (
+    <PM100Setup />
+  ) : (
+    <Launcher />
+  );
 }

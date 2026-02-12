@@ -62,16 +62,23 @@
 /* ===== Back Button ===== */
 
 .backBtn {
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  background: rgba(255, 255, 255, 0.06);
-  color: #e9ecff;
-  border-radius: 10px;
-  padding: 8px 10px;
+  padding: 8px 14px;
+  border-radius: 12px;
+  border: 1px solid #e5e5e5;
+  background: #f9f9f9;
+  color: #333;
+  font-size: 14px;
   cursor: pointer;
+  transition: none; /* ✅ hover 애니메이션 제거 */
 }
 
 .backBtn:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: #f9f9f9; /* ✅ hover 시 색 변화 막기 */
+  border-color: #e5e5e5;
+}
+
+.backBtn:active {
+  background: #f0f0f0; /* 눌렀을 때만 살짝 */
 }
 
 /* ===== Toolbar ===== */
@@ -84,37 +91,45 @@
 
 /* 버튼 기본 */
 .pmBtn {
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  background: rgba(255, 255, 255, 0.08);
-  color: #e9ecff;
-  border-radius: 8px;
   padding: 8px 14px;
+  border-radius: 12px;
+  border: 1px solid #e5e5e5;
+  background: #f9f9f9;
+  color: #333;
+  font-size: 14px;
   cursor: pointer;
-  transition: 0.15s;
 }
 
 .pmBtn:hover {
-  background: rgba(255, 255, 255, 0.14);
+  background: #f2f2f2;
 }
 
-.pmBtn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-/* Primary 버튼 */
 .pmBtn.primary {
-  background: #4a6cff;
-  border: none;
+  background: #e9f2ff;
+  border-color: #bcd6ff;
 }
 
 .pmBtn.primary:hover {
-  background: #5d7dff;
+  background: #dceaff;
 }
 
-/* Ghost 버튼 */
+.pmBtn.stop {
+  background: #ffeaea;
+  border-color: #ffcaca;
+}
+
+.pmBtn.stop:hover {
+  background: #ffdede;
+}
+
 .pmBtn.ghost {
   background: transparent;
+  border-color: transparent;
+}
+
+.pmBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 /* 상태 표시 */
@@ -145,6 +160,8 @@
 
 /* 리스트 영역(로그 위) */
 .listWrapper {
+  width: 100%;
+  min-width: 0;
   margin-top: 16px;
   flex: 1; /* ✅ 로그와 함께 세로 공간 분배 */
   min-height: 0; /* ✅ 내부 스크롤을 위해 중요 */
@@ -167,6 +184,8 @@
 
 /* 테이블 스크롤(필요 시) */
 .tableWrap {
+  width: 100%;
+  min-width: 0;
   flex: 1;
   min-height: 0;
   overflow: auto; /* ✅ rows 많으면 여기만 스크롤 */
@@ -177,9 +196,17 @@
 
 /* 테이블 */
 .deviceTable {
+  table-layout: fixed;
   width: 100%;
   border-collapse: collapse;
   font-size: 12px;
+}
+
+.deviceTable th,
+.deviceTable td {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .deviceTable thead th {
