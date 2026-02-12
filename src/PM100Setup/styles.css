@@ -1,0 +1,147 @@
+/* src/PM100Setup/styles.css */
+
+.setupRoot {
+  height: 100vh;
+  box-sizing: border-box;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.topBar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.backBtn {
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid #ddd;
+  background: #fff;
+  cursor: pointer;
+}
+
+.serverControls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+}
+
+.portLabel {
+  font-size: 12px;
+  opacity: 0.8;
+}
+
+.portInput {
+  width: 110px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid #ddd;
+  outline: none;
+}
+
+.pmBtn {
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid #ddd;
+  cursor: pointer;
+  background: #fff;
+}
+
+.pmBtn.primary {
+  border-color: #cfe0ff;
+}
+
+.pmBtn.danger {
+  border-color: #ffd0d0;
+}
+
+.pmBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.serverHint {
+  margin-left: 6px;
+  font-size: 12px;
+  opacity: 0.75;
+  white-space: nowrap;
+}
+
+.miniListWrap {
+  flex: 0 0 22vh; /* ✅ Discovery 대비 줄인 높이 */
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow: hidden;
+}
+
+.miniTableTitle {
+  font-size: 12px;
+  opacity: 0.8;
+}
+
+.miniTableBox {
+  flex: 1;
+  border: 1px solid #eee;
+  border-radius: 12px;
+  overflow: auto;
+}
+
+.miniTable {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.miniTable th,
+.miniTable td {
+  font-size: 13px;
+  padding: 6px 10px; /* ✅ 세로 간격 작게 */
+  border-bottom: 1px solid #f2f2f2;
+}
+
+.emptyCell {
+  text-align: center;
+  padding: 18px 0;
+  opacity: 0.6;
+}
+
+.mono {
+  font-family:
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+    "Courier New", monospace;
+}
+
+.middleSpace {
+  flex: 1; /* ✅ 가운데 비움 */
+}
+
+.miniLogWrap {
+  flex: 0 0 22vh; /* ✅ Discovery 대비 줄인 높이 */
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow: hidden;
+}
+
+.miniLogTitle {
+  font-size: 12px;
+  opacity: 0.8;
+}
+
+.miniLogArea {
+  flex: 1;
+  width: 100%;
+  resize: none;
+  border-radius: 12px;
+  border: 1px solid #eee;
+  padding: 10px;
+  box-sizing: border-box;
+  outline: none;
+  overflow: auto;
+  line-height: 1.35;
+}

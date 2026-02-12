@@ -27,6 +27,28 @@ function createPM100PreloadApi() {
     resetDevice: (ip, mac) => electron.ipcRenderer.invoke(PM100_CHANNELS.reset, ip, mac)
   };
 }
+const PM100_SETUP_CHANNELS = {
+  start: "pm100setup:start",
+  stop: "pm100setup:stop",
+  status: "pm100setup:status",
+  log: "pm100setup:log"
+};
+const pm100setupApi = {
+  startServer: (port, host) => electron.ipcRenderer.invoke(PM100_SETUP_CHANNELS.start, port, host),
+  stopServer: () => electron.ipcRenderer.invoke(PM100_SETUP_CHANNELS.stop),
+  getStatus: () => electron.ipcRenderer.invoke(PM100_SETUP_CHANNELS.status),
+  onLog: (cb) => {
+    const handler = (_, line) => cb(line);
+    electron.ipcRenderer.on(PM100_SETUP_CHANNELS.log, handler);
+    return () => electron.ipcRenderer.removeListener(PM100_SETUP_CHANNELS.log, handler);
+  },
+  onStatus: (cb) => {
+    const handler = (_, s) => cb(s);
+    electron.ipcRenderer.on(PM100_SETUP_CHANNELS.status, handler);
+    return () => electron.ipcRenderer.removeListener(PM100_SETUP_CHANNELS.status, handler);
+  }
+};
 electron.contextBridge.exposeInMainWorld("api", {
-  pm100: createPM100PreloadApi()
+  pm100: createPM100PreloadApi(),
+  pm100setup: pm100setupApi
 });

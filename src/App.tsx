@@ -1,35 +1,25 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/electron-vite.animate.svg'
-import './App.css'
+import React, { useEffect, useMemo, useState } from "react";
+import Launcher from "./Launcher";
+import PM100Discovery from "./PM100Discovery/PM100Discovery";
+import PM100Setup from "./PM100Setup/PM100Setup";
 
-function App() {
-  const [count, setCount] = useState(0)
+export default function App() {
+  const [hash, setHash] = useState(window.location.hash || "#/");
 
-  return (
-    <>
-      <div>
-        <a href="https://electron-vite.github.io" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.tsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-    </>
-  )
+  useEffect(() => {
+    const onHashChange = () => setHash(window.location.hash || "#/");
+    window.addEventListener("hashchange", onHashChange);
+    return () => window.removeEventListener("hashchange", onHashChange);
+  }, []);
+
+  const page = useMemo(() => {
+    const path = hash.replace("#", "");
+    if (path.startsWith("/pm100-discovery")) return "pm100-discovery";
+    if (path.startsWith("/pm100-setup")) return "pm100-setup";
+    return "launcher";
+  }, [hash]);
+
+  if (page === "pm100-discovery") return <PM100Discovery />;
+  if (page === "pm100-setup") return <PM100Setup />;
+  return <Launcher />;
 }
-
-export default App

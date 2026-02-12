@@ -3,6 +3,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import os from "os";
 import dgram from "dgram";
+import net from "net";
 const PM100_CHANNELS = {
   scanStart: "pm100:scanStart",
   scanStop: "pm100:scanStop",
@@ -53,21 +54,6 @@ function broadcastByMask(ip, mask) {
   const bcast = (ipU | ~maskU >>> 0) >>> 0;
   return u32ToIp(bcast);
 }
-function pickLocalIPv4Fallback() {
-  const nets = os.networkInterfaces();
-  const ips = [];
-  for (const ifname of Object.keys(nets)) {
-    for (const a of nets[ifname] || []) {
-      const isV4 = a.family === "IPv4" || a.family === 4;
-      if (!isV4) continue;
-      if (a.internal) continue;
-      ips.push(a.address);
-    }
-  }
-  if (ips.length === 0) return null;
-  return ips.find((ip) => ip.startsWith("192.168.1.")) || // ⭐️ 추가
-  ips.find((ip) => ip.startsWith("192.168.")) || ips.find((ip) => ip.startsWith("10.")) || ips.find((ip) => ip.startsWith("172.16.")) || ips[0];
-}
 function getBroadcastTargets(mask) {
   const nets = os.networkInterfaces();
   const targets = /* @__PURE__ */ new Set();
@@ -115,11 +101,6 @@ class PM100Scanner {
       this.onLog("Scan already running (socket exists) - ignored");
       return;
     }
-    const localIp = pickLocalIPv4Fallback();
-    if (!localIp) {
-      this.onLog("No local IPv4 found (cannot start scan)");
-      return;
-    }
     const socket = dgram.createSocket({ type: "udp4", reuseAddr: true });
     this.socket = socket;
     socket.on("error", (err) => {
@@ -148,7 +129,6 @@ class PM100Scanner {
       socket.setBroadcast(true);
       socket.setRecvBufferSize(1024 * 1024);
       const targets = getBroadcastTargets(SEARCH_MASK);
-      this.onLog(`Bind OK: ${localIp}`);
       this.onLog(
         `Scan start: port=${PM100_PORT}, mask=${SEARCH_MASK}, targets=${targets.join(", ")}`
       );
@@ -270,6 +250,114 @@ function registerPM100DiscoveryMainIPC(getWin) {
     }
   });
 }
+function hasIp(ip) {
+  const nets = os.networkInterfaces();
+  for (const ifname of Object.keys(nets)) {
+    for (const a of nets[ifname] || []) {
+      const isV4 = a.family === "IPv4" || a.family === 4;
+      if (!isV4) continue;
+      if (a.internal) continue;
+      if (a.address === ip) return true;
+    }
+  }
+  return false;
+}
+class PM100SetupServer {
+  constructor(onLog, onStatus) {
+    this.onLog = onLog;
+    this.onStatus = onStatus;
+  }
+  server = null;
+  port = null;
+  host = null;
+  start(port, host) {
+    if (this.server) return;
+    if (!hasIp(host)) {
+      this.onLog(`Start blocked in main: IP ${host} not found on this PC`);
+      this.onStatus({ running: false });
+      return;
+    }
+    const server2 = net.createServer((sock) => {
+      this.onLog(`Client connected: ${sock.remoteAddress}:${sock.remotePort}`);
+      sock.on("data", (buf) => {
+        this.onLog(
+          `RX ${buf.length} bytes from ${sock.remoteAddress}:${sock.remotePort}`
+        );
+      });
+      sock.on("close", () => {
+        this.onLog(
+          `Client disconnected: ${sock.remoteAddress}:${sock.remotePort}`
+        );
+      });
+      sock.on("error", (e) => {
+        this.onLog(`Client error: ${e.message}`);
+      });
+    });
+    server2.on("error", (e) => {
+      this.onLog(`Server error: ${e.message ?? e}`);
+      this.stop();
+    });
+    server2.listen(port, host, () => {
+      this.server = server2;
+      this.port = port;
+      this.host = host;
+      this.onLog(`Server started: ${host}:${port}`);
+      this.onStatus({ running: true, port });
+    });
+  }
+  stop() {
+    if (!this.server) return;
+    const s = this.server;
+    this.server = null;
+    try {
+      s.close(() => {
+        this.onLog("Server stopped");
+        this.onStatus({ running: false });
+      });
+    } catch {
+      this.onLog("Server stopped");
+      this.onStatus({ running: false });
+    }
+  }
+  status() {
+    return { running: !!this.server, port: this.port ?? void 0 };
+  }
+}
+const PM100_SETUP_CHANNELS = {
+  start: "pm100setup:start",
+  stop: "pm100setup:stop",
+  status: "pm100setup:status",
+  log: "pm100setup:log"
+};
+let server = null;
+function getWC(getWin) {
+  const w = getWin();
+  if (!w) throw new Error("Window not ready");
+  return w.webContents;
+}
+function registerPM100SetupMainIPC(getWin) {
+  ipcMain.handle(
+    PM100_SETUP_CHANNELS.start,
+    (_evt, port, host) => {
+      const wc = getWC(getWin);
+      if (!server) {
+        server = new PM100SetupServer(
+          (line) => wc.send(PM100_SETUP_CHANNELS.log, line),
+          (s) => wc.send(PM100_SETUP_CHANNELS.status, s)
+        );
+      }
+      server.start(port, host);
+      return true;
+    }
+  );
+  ipcMain.handle(PM100_SETUP_CHANNELS.stop, () => {
+    if (server) server.stop();
+    return true;
+  });
+  ipcMain.handle(PM100_SETUP_CHANNELS.status, () => {
+    return server ? server.status() : { running: false };
+  });
+}
 const __filename$1 = fileURLToPath(import.meta.url);
 const __dirname$1 = path.dirname(__filename$1);
 let win = null;
@@ -282,6 +370,7 @@ function createWindow() {
       preload: path.join(__dirname$1, "preload.mjs")
     }
   });
+  win.webContents.openDevTools();
   const devUrl = process.env.VITE_DEV_SERVER_URL;
   if (devUrl) win.loadURL(devUrl);
   else win.loadFile(path.join(process.cwd(), "index.html"));
@@ -289,6 +378,7 @@ function createWindow() {
 app.whenReady().then(() => {
   createWindow();
   registerPM100DiscoveryMainIPC(() => win);
+  registerPM100SetupMainIPC(() => win);
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });

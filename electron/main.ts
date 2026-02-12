@@ -2,6 +2,7 @@ import { app, BrowserWindow } from "electron";
 import path from "path";
 import { fileURLToPath } from "url";
 import { registerPM100DiscoveryMainIPC } from "./PM100Discovery/ipcMain";
+import { registerPM100SetupMainIPC } from "./PM100Setup/ipcMain";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -18,6 +19,8 @@ function createWindow() {
     },
   });
 
+  win.webContents.openDevTools(); // ✅ 이 줄 추가
+
   const devUrl = process.env.VITE_DEV_SERVER_URL;
   if (devUrl) win.loadURL(devUrl);
   else win.loadFile(path.join(process.cwd(), "index.html"));
@@ -28,7 +31,7 @@ app.whenReady().then(() => {
 
   // ✅ PM100 IPC 등록(관련 로직은 electron/PM100Discovery에만 존재)
   registerPM100DiscoveryMainIPC(() => win);
-
+  registerPM100SetupMainIPC(() => win);
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });

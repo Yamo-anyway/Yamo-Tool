@@ -1,56 +1,50 @@
+// src/Launcher.tsx
 import React from "react";
+import "./styles.css"; // 기존 런처 스타일 쓰는 파일
 
-const COLS = 5;
-const ROWS = 4;
-const TOTAL = COLS * ROWS;
-
-function iconSvgDataUri(label: string) {
-  const svg = `
-  <svg xmlns="http://www.w3.org/2000/svg" width="96" height="96">
-    <rect x="6" y="6" width="84" height="84" rx="18" fill="#4a6cff"/>
-    <text x="48" y="56" text-anchor="middle" font-size="22" fill="white"
-      font-family="system-ui, -apple-system">
-      ${label}
-    </text>
-  </svg>`;
-  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
-}
+type Slot = {
+  title: string;
+  enabled: boolean;
+  onClick?: () => void;
+};
 
 export default function Launcher() {
-  const items = Array.from({ length: TOTAL }, (_, i) => ({
-    i,
+  const slots: Slot[] = Array.from({ length: 20 }).map((_, i) => ({
     title: `Slot ${i + 1}`,
-    icon: iconSvgDataUri(String(i + 1)),
+    enabled: false,
   }));
 
-  const onClickSlot = (idx: number) => {
-    if (idx !== 0) return; // ✅ 슬롯 1(인덱스 0)만 동작
-    window.location.hash = `#/discovery?slot=${idx}`;
+  // ✅ 1번: PM100 Discovery (기존)
+  slots[0] = {
+    title: "PM100 Discovery",
+    enabled: true,
+    onClick: () => (window.location.hash = "#/pm100-discovery?slot=0"),
+  };
+
+  // ✅ 2번: PM100 Setup (신규)
+  slots[1] = {
+    title: "PM100 Setup",
+    enabled: true,
+    onClick: () => (window.location.hash = "#/pm100-setup?slot=1"),
   };
 
   return (
     <div className="launcher">
-      <div className="header">
-        <div className="title">UDP Tools Launcher</div>
-        <div className="sub">현재는 Slot 1만 동작합니다.</div>
-      </div>
-
       <div className="grid">
-        {items.map((it) => {
-          const enabled = it.i === 0;
-          return (
-            <button
-              key={it.i}
-              className={`tile ${enabled ? "" : "tileDisabled"}`}
-              onClick={() => onClickSlot(it.i)}
-              disabled={!enabled}
-              title={enabled ? "Open PM100 Discovery" : "준비중"}
-            >
-              <img className="icon" src={it.icon} alt={it.title} />
-              <div className="label">{it.title}</div>
-            </button>
-          );
-        })}
+        {slots.map((s, idx) => (
+          <button
+            key={idx}
+            className={`slot ${s.enabled ? "" : "disabled"}`}
+            disabled={!s.enabled}
+            onClick={s.onClick}
+            title={s.enabled ? s.title : "Not available"}
+          >
+            <div className="slotInner">
+              <div className="slotIcon" />
+              <div className="slotTitle">{s.title}</div>
+            </div>
+          </button>
+        ))}
       </div>
     </div>
   );

@@ -1,6 +1,5 @@
 import os from "os";
 import dgram from "dgram";
-import { execSync } from "child_process";
 
 export const PM100_PORT = 1500; // ✅ 장치가 수신하는 포트
 export const SEARCH_MASK = "255.255.255.0";
@@ -37,31 +36,6 @@ function broadcastByMask(ip: string, mask: string) {
   const maskU = ipToU32(mask);
   const bcast = (ipU | (~maskU >>> 0)) >>> 0;
   return u32ToIp(bcast);
-}
-
-function pickLocalIPv4Fallback(): string | null {
-  const nets = os.networkInterfaces();
-  const ips: string[] = [];
-
-  for (const ifname of Object.keys(nets)) {
-    for (const a of nets[ifname] || []) {
-      const isV4 = a.family === "IPv4" || (a as any).family === 4;
-      if (!isV4) continue;
-      if (a.internal) continue;
-      ips.push(a.address);
-    }
-  }
-
-  if (ips.length === 0) return null;
-
-  // ✅ 장치가 있는 대역 우선
-  return (
-    ips.find((ip) => ip.startsWith("192.168.1.")) || // ⭐️ 추가
-    ips.find((ip) => ip.startsWith("192.168.")) ||
-    ips.find((ip) => ip.startsWith("10.")) ||
-    ips.find((ip) => ip.startsWith("172.16.")) ||
-    ips[0]
-  );
 }
 
 // ✅ 브로드캐스트 타겟은 “전부” (원래 방식 유지)
@@ -143,12 +117,6 @@ export class PM100Scanner {
       return;
     }
 
-    const localIp = pickLocalIPv4Fallback();
-    if (!localIp) {
-      this.onLog("No local IPv4 found (cannot start scan)");
-      return;
-    }
-
     const socket = dgram.createSocket({ type: "udp4", reuseAddr: true });
 
     this.socket = socket;
@@ -189,7 +157,6 @@ export class PM100Scanner {
 
       const targets = getBroadcastTargets(SEARCH_MASK);
 
-      this.onLog(`Bind OK: ${localIp}`);
       this.onLog(
         `Scan start: port=${PM100_PORT}, mask=${SEARCH_MASK}, targets=${targets.join(", ")}`,
       );
