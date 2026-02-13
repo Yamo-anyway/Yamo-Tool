@@ -41,6 +41,13 @@ declare global {
               serverPort: number;
             }) => Promise<boolean>;
           };
+          log: {
+            openWindow: () => Promise<boolean>;
+            append: (line: string) => void;
+            clear: () => Promise<boolean>;
+            getAll: () => Promise<string>;
+            onUpdated: (cb: (allText: string) => void) => () => void;
+          };
         };
       };
     };

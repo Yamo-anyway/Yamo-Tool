@@ -1,0 +1,54 @@
+/* ✅ 로그창 전용: 창 전체를 100%로 강제 */
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+/* ✅ padding을 줄이거나 제거 (이게 가장 체감 큼) */
+.pmLogRoot {
+  height: 100vh;
+  width: 100%;
+  box-sizing: border-box;
+
+  padding: 10px; /* 🔥 20 -> 10 (또는 0) */
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+
+  min-width: 0;
+}
+
+.pmLogTop {
+  height: 40px;
+  display: flex;
+  align-items: flex-start;
+  min-width: 0;
+}
+
+.pmLogArea {
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  display: block; /* ✅ */
+  resize: none;
+
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(0, 0, 0, 0.25);
+  color: #e9ecff;
+
+  padding: 12px;
+  outline: none;
+
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas;
+  font-size: 13px;
+  line-height: 1.4;
+
+  overflow-y: auto;
+  overflow-x: hidden;
+}

@@ -30,6 +30,14 @@ export const PM100_CHANNELS = {
       reset: "pm100tool:udp:reset",
       updateConfig: "pm100tool:udp:updateConfig",
     },
+
+    log: {
+      openWindow: "pm100tool:log:openWindow",
+      append: "pm100tool:log:append",
+      clear: "pm100tool:log:clear",
+      getAll: "pm100tool:log:getAll",
+      updated: "pm100tool:log:updated",
+    },
   },
 
   /**

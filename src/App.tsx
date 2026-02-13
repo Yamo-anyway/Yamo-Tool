@@ -3,6 +3,7 @@ import Launcher from "./Launcher";
 import PM100Discovery from "./PM100Discovery";
 import PM100Setup from "./PM100Setup";
 import PM100Tool from "./PM100Tool";
+import PM100Log from "./PM100Log";
 
 export default function App() {
   const [hash, setHash] = useState(window.location.hash || "#/");
@@ -19,11 +20,14 @@ export default function App() {
     if (pathOnly.startsWith("/pm100-discovery")) return "pm100-discovery";
     if (pathOnly.startsWith("/pm100-setup")) return "pm100-setup";
     if (pathOnly.startsWith("/pm100-tool")) return "pm100-tool";
+    if (pathOnly.startsWith("/pm100-log")) return "pm100-log";
 
     return "launcher";
   }, [hash]);
 
-  return page === "pm100-tool" ? (
+  return page === "pm100-log" ? (
+    <PM100Log />
+  ) : page === "pm100-tool" ? (
     <PM100Tool />
   ) : page === "pm100-discovery" ? (
     <PM100Discovery />

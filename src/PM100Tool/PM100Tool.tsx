@@ -110,6 +110,7 @@ const parsePort = (
 export default function PM100Tool() {
   // ===== (숨김) 로그 버퍼 =====
   const [log, setLog] = useState("");
+
   const appendLog = (scope: "UDP" | "TCP" | "SYS", line: string) => {
     const now = new Date();
     const hh = String(now.getHours()).padStart(2, "0");
@@ -117,11 +118,14 @@ export default function PM100Tool() {
     const ss = String(now.getSeconds()).padStart(2, "0");
     const ms = String(now.getMilliseconds()).padStart(3, "0");
     const ts = `${hh}:${mm}:${ss}.${ms}`;
-    setLog((prev) =>
-      prev
-        ? `${prev}\n[${ts}] [${scope}] ${line}`
-        : `[${ts}] [${scope}] ${line}`,
-    );
+
+    const full = `[${ts}] [${scope}] ${line}`;
+
+    // (선택) PM100Tool 내부에도 로그를 남기고 싶으면 유지
+    setLog((prev) => (prev ? `${prev}\n${full}` : full));
+
+    // ✅ 로그 창(메인 프로세스 버퍼)에도 누적
+    window.api.pm100.tool.log.append(full);
   };
 
   // ===== UDP: scan + list =====
@@ -361,8 +365,11 @@ export default function PM100Tool() {
           ← Back
         </button>
 
-        <button className="pmBtnSmall pmClearBtn" onClick={() => setLog("")}>
-          Clear Log
+        <button
+          className="pmBtnSmall pmClearBtn"
+          onClick={() => window.api.pm100.tool.log.openWindow()}
+        >
+          View Log
         </button>
       </div>
 

@@ -29,6 +29,13 @@ const PM100_CHANNELS = {
       udp: "pm100tool:udp:udp",
       reset: "pm100tool:udp:reset",
       updateConfig: "pm100tool:udp:updateConfig"
+    },
+    log: {
+      openWindow: "pm100tool:log:openWindow",
+      append: "pm100tool:log:append",
+      clear: "pm100tool:log:clear",
+      getAll: "pm100tool:log:getAll",
+      updated: "pm100tool:log:updated"
     }
   },
   /**
@@ -912,10 +919,135 @@ function registerPM100ToolUdpMainIPC(getWin) {
     }
   });
 }
+let logWin = null;
+const MAX_LINES = 5e3;
+let lines = [];
+function pushLine(line) {
+  lines.push(line);
+  if (lines.length > MAX_LINES) lines = lines.slice(lines.length - MAX_LINES);
+}
+function broadcast(getMainWin) {
+  const payload = lines.join("\n");
+  const main = getMainWin();
+  if (main && !main.isDestroyed()) {
+    main.webContents.send(PM100_CHANNELS.tool.log.updated, payload);
+  }
+  if (logWin && !logWin.isDestroyed()) {
+    logWin.webContents.send(PM100_CHANNELS.tool.log.updated, payload);
+  }
+}
+function attachTopPolicy(win2) {
+  const setTop = (on) => {
+    if (win2.isDestroyed()) return;
+    if (on) win2.setAlwaysOnTop(true, "floating");
+    else win2.setAlwaysOnTop(false);
+  };
+  setTop(true);
+  const onMove = () => setTop(true);
+  const onWinFocus = () => setTop(true);
+  const onWinShow = () => setTop(true);
+  const onWinBlur = () => setTop(false);
+  win2.on("move", onMove);
+  win2.on("focus", onWinFocus);
+  win2.on("show", onWinShow);
+  win2.on("blur", onWinBlur);
+  const onAnyWindowBlur = () => {
+    setTimeout(() => {
+      const focused = BrowserWindow.getFocusedWindow();
+      if (!focused) {
+        setTop(false);
+      }
+    }, 0);
+  };
+  const onAnyWindowFocus = () => {
+    setTop(true);
+  };
+  app.on("browser-window-blur", onAnyWindowBlur);
+  app.on("browser-window-focus", onAnyWindowFocus);
+  win2.once("closed", () => {
+    app.removeListener("browser-window-blur", onAnyWindowBlur);
+    app.removeListener("browser-window-focus", onAnyWindowFocus);
+  });
+  return { setTop };
+}
+let mainFocusHooked = false;
+function registerPM100ToolLogMainIPC(getMainWin, preloadPath) {
+  if (!mainFocusHooked) {
+    mainFocusHooked = true;
+    const hookMainFocus = () => {
+      const main = getMainWin();
+      if (!main || main.isDestroyed()) return;
+      main.on("focus", () => {
+        if (!logWin || logWin.isDestroyed()) return;
+        logWin.setAlwaysOnTop(true, "floating");
+      });
+    };
+    hookMainFocus();
+    app.on("browser-window-created", hookMainFocus);
+  }
+  ipcMain.on(PM100_CHANNELS.tool.log.append, (_evt, line) => {
+    if (typeof line !== "string") return;
+    pushLine(line);
+    broadcast(getMainWin);
+  });
+  ipcMain.handle(PM100_CHANNELS.tool.log.clear, () => {
+    lines = [];
+    broadcast(getMainWin);
+    return true;
+  });
+  ipcMain.handle(PM100_CHANNELS.tool.log.getAll, () => lines.join("\n"));
+  ipcMain.handle(PM100_CHANNELS.tool.log.openWindow, async () => {
+    if (logWin && !logWin.isDestroyed()) {
+      logWin.setAlwaysOnTop(true, "floating");
+      logWin.show();
+      logWin.focus();
+      logWin.moveTop();
+      return true;
+    }
+    logWin = new BrowserWindow({
+      width: 500,
+      height: 500,
+      title: "PM100 Log",
+      parent: void 0,
+      // ✅ top 창은 parent 없이가 안정적
+      show: false,
+      // ✅ 로드 후 show
+      webPreferences: {
+        preload: preloadPath
+      }
+    });
+    const { setTop } = attachTopPolicy(logWin);
+    logWin.setVisibleOnAllWorkspaces(true);
+    logWin.setFullScreenable(false);
+    const devUrl = process.env.VITE_DEV_SERVER_URL;
+    if (devUrl) {
+      await logWin.loadURL(`${devUrl}#/pm100-log`);
+    } else {
+      await logWin.loadFile(path.join(process.cwd(), "index.html"), {
+        hash: "/pm100-log"
+      });
+    }
+    if (!logWin.isDestroyed()) {
+      logWin.show();
+      logWin.focus();
+      logWin.moveTop();
+      setTop(true);
+      logWin.webContents.send(
+        PM100_CHANNELS.tool.log.updated,
+        lines.join("\n")
+      );
+    }
+    logWin.once("closed", () => {
+      logWin = null;
+    });
+    return true;
+  });
+}
 const __filename$1 = fileURLToPath(import.meta.url);
 const __dirname$1 = path.dirname(__filename$1);
 let win = null;
 function createWindow() {
+  const preloadPath = path.join(__dirname$1, "preload.mjs");
   win = new BrowserWindow({
     width: 1140,
     height: 800,
@@ -927,6 +1059,7 @@ function createWindow() {
   win.on("closed", () => {
     win = null;
   });
+  registerPM100ToolLogMainIPC(() => win, preloadPath);
   const devUrl = process.env.VITE_DEV_SERVER_URL;
   if (devUrl) win.loadURL(devUrl);
   else win.loadFile(path.join(process.cwd(), "index.html"));

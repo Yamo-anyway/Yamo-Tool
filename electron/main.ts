@@ -7,6 +7,7 @@ import {
   stopPM100SetupServer,
 } from "./features/pm100/setup/ipcMain";
 import { registerPM100ToolUdpMainIPC } from "./features/pm100/tool/udp/ipcMain";
+import { registerPM100ToolLogMainIPC } from "./features/pm100/tool/log/ipcMain";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -14,6 +15,8 @@ const __dirname = path.dirname(__filename);
 let win: BrowserWindow | null = null;
 
 function createWindow() {
+  const preloadPath = path.join(__dirname, "preload.mjs");
+
   win = new BrowserWindow({
     width: 1140,
     height: 800,
@@ -27,6 +30,8 @@ function createWindow() {
   win.on("closed", () => {
     win = null;
   });
+
+  registerPM100ToolLogMainIPC(() => win, preloadPath);
 
   const devUrl = process.env.VITE_DEV_SERVER_URL;
   if (devUrl) win.loadURL(devUrl);

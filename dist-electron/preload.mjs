@@ -25,6 +25,13 @@ const PM100_CHANNELS = {
       udp: "pm100tool:udp:udp",
       reset: "pm100tool:udp:reset",
       updateConfig: "pm100tool:udp:updateConfig"
+    },
+    log: {
+      openWindow: "pm100tool:log:openWindow",
+      append: "pm100tool:log:append",
+      clear: "pm100tool:log:clear",
+      getAll: "pm100tool:log:getAll",
+      updated: "pm100tool:log:updated"
     }
   }
 };
@@ -89,12 +96,26 @@ const pm100toolUdpApi = {
     payload
   )
 };
+const pm100toolLogApi = {
+  openWindow: () => electron.ipcRenderer.invoke(PM100_CHANNELS.tool.log.openWindow),
+  append: (line) => {
+    electron.ipcRenderer.send(PM100_CHANNELS.tool.log.append, line);
+  },
+  clear: () => electron.ipcRenderer.invoke(PM100_CHANNELS.tool.log.clear),
+  getAll: () => electron.ipcRenderer.invoke(PM100_CHANNELS.tool.log.getAll),
+  onUpdated: (cb) => {
+    const handler = (_, allText) => cb(allText);
+    electron.ipcRenderer.on(PM100_CHANNELS.tool.log.updated, handler);
+    return () => electron.ipcRenderer.removeListener(PM100_CHANNELS.tool.log.updated, handler);
+  }
+};
 electron.contextBridge.exposeInMainWorld("api", {
   pm100: {
     discovery: pm100discoveryApi,
     setup: pm100setupApi,
     tool: {
-      udp: pm100toolUdpApi
+      udp: pm100toolUdpApi,
+      log: pm100toolLogApi
     }
   }
 });
