@@ -1,6 +1,6 @@
 // src/Launcher.tsx
 import React from "react";
-import "./styles.css"; // 기존 런처 스타일 쓰는 파일
+import "./styles.css";
 
 type Slot = {
   title: string;
@@ -14,18 +14,25 @@ export default function Launcher() {
     enabled: false,
   }));
 
-  // ✅ 1번: PM100 Discovery (기존)
+  // ✅ 1번: PM100 Tool (Discovery + Setup 통합 화면)
   slots[0] = {
-    title: "PM100 Discovery",
+    title: "PM100 Tool",
     enabled: true,
-    onClick: () => (window.location.hash = "#/pm100-discovery?slot=0"),
+    onClick: () => (window.location.hash = "#/pm100-tool?slot=0"),
   };
 
-  // ✅ 2번: PM100 Setup (신규)
-  slots[1] = {
+  // ✅ 19번: PM100 Discovery (기존)
+  slots[18] = {
+    title: "PM100 Discovery",
+    enabled: true,
+    onClick: () => (window.location.hash = "#/pm100-discovery?slot=18"),
+  };
+
+  // ✅ 20번: PM100 Setup (기존)
+  slots[19] = {
     title: "PM100 Setup",
     enabled: true,
-    onClick: () => (window.location.hash = "#/pm100-setup?slot=1"),
+    onClick: () => (window.location.hash = "#/pm100-setup?slot=19"),
   };
 
   return (

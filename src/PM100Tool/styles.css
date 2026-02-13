@@ -1,0 +1,367 @@
+/* Root: 위쪽에 최대한 붙이고, 바깥 여백(마진 느낌) 50px */
+.pmToolRoot {
+  height: 100vh;
+  width: 100%;
+  box-sizing: border-box;
+
+  padding: 20px; /* ✅ "마진 50px"을 안전하게 padding으로 처리 */
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+
+  overflow: hidden;
+}
+
+/* 1단: Top 높이 100px */
+.pmToolTop {
+  height: 40px;
+  display: flex;
+  align-items: flex-start; /* 위쪽에 붙임 */
+  gap: 14px;
+}
+
+/* 버튼 60% 크기 느낌: padding/font를 줄여서 구현 */
+.pmBtnSmall {
+  padding: 6px 10px; /* 기존보다 작게 */
+  border-radius: 10px;
+  border: 1px solid #e5e5e5;
+  background: #f9f9f9;
+  color: #333;
+  font-size: 12px; /* 작게 */
+  cursor: pointer;
+}
+
+.pmBtnSmall:hover {
+  background: #f2f2f2;
+}
+
+.pmBtnSmall:active {
+  background: #ededed;
+}
+
+.pmBackBtn {
+  /* 필요하면 개별 스타일 추가 */
+}
+
+.pmClearBtn {
+  margin-left: 10px; /* ✅ back 오른쪽에 살짝 간격 */
+}
+
+/* 공통 stage wrapper */
+.pmToolStage {
+  width: 100%;
+  min-width: 0;
+}
+
+/* 2단: UDP/TCP 가로 분할, 높이 250px */
+.pmStage2 {
+  height: 350px;
+  display: flex; /* 🔥 grid → flex */
+  width: 100%; /* 🔥 부모 가로 100% */
+  gap: 10px; /* 🔥 루트 gap과 맞춤 */
+}
+
+.pmStage2 > .pmPane {
+  flex: 1; /* 🔥 정확히 반반 */
+  min-width: 0; /* 🔥 내부 overflow 방지 */
+}
+
+/* 3단: 상세/설정 높이 250px */
+.pmStage3 {
+  height: 250px;
+  width: 1100px; /* 🔥 부모 가로 100% */
+  gap: 10px; /* 🔥 루트 gap과 맞춤 */
+}
+
+/* 4단: 로그 버튼 영역 (높이 고정은 아직 안 줌) */
+.pmStage4 {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* Pane 공통 */
+.pmPane {
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+
+  padding: 12px;
+  box-sizing: border-box;
+
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.pmPaneFill {
+  height: 100%;
+}
+
+.pmPaneHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.pmPaneTitle {
+  font-size: 13px;
+  font-weight: 700;
+  opacity: 0.9;
+}
+
+.pmPaneBody {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* 자리 표시 */
+.pmPlaceholder {
+  height: 100%;
+  width: 100%;
+  border-radius: 10px;
+  border: 1px dashed rgba(255, 255, 255, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.7;
+  font-size: 12px;
+}
+
+.pmHintText {
+  opacity: 0.75;
+  font-size: 12px;
+}
+
+/* UDP pane 내부: 1단 버튼 + 2단 리스트 */
+.pmUdpPane {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.pmUdpControls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 버튼 더 작게 (UDP/TCP 내부용) */
+.pmBtnXs {
+  padding: 5px 9px;
+  border-radius: 10px;
+  border: 1px solid #e5e5e5;
+  background: #f9f9f9;
+  color: #333;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.pmBtnXs:hover {
+  background: #f2f2f2;
+}
+
+.pmBtnXs:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.pmBtnXs.primary {
+  background: #e9f2ff;
+  border-color: #bcd6ff;
+}
+
+.pmBtnXs.primary:hover {
+  background: #dceaff;
+}
+
+.pmBtnXs.stop {
+  background: #ffeaea;
+  border-color: #ffcaca;
+}
+
+.pmBtnXs.stop:hover {
+  background: #ffdede;
+}
+
+/* 리스트 영역은 남은 높이 전부 사용 + 스크롤 */
+.pmUdpList {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+/* ===== Table 기본 ===== */
+/* 테이블 */
+.pmTable {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 12px;
+}
+
+/* ✅ 헤더/내용 모두 가운데 정렬 */
+.pmTable th,
+.pmTable td {
+  text-align: center;
+  vertical-align: middle;
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.pmTable th:last-child,
+.pmTable td:last-child {
+  border-right: none;
+}
+
+.pmTable thead th {
+  padding: 6px 8px;
+  font-weight: 600;
+  background: rgba(0, 0, 0, 0.35);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.pmTable tbody td {
+  padding: 6px 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pmTable tbody tr:hover td {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+/*
+  ✅ 폭 정책
+  - Port는 좁게 (기존보다 ~20% 줄이는 느낌으로 고정폭)
+  - 나머지 Mac / Server IP / Device IP는 3등분
+*/
+.colPort {
+  width: 70px; /* 🔥 Port 좁게 (필요하면 56~72 사이로) */
+}
+
+.colMac,
+.colServerIp,
+.colDevice {
+  width: calc((100% - 70px) / 3);
+}
+
+/* 상단 Server(콜스팬) 헤더도 가운데 */
+.colServer {
+  text-align: center;
+}
+
+/* hover */
+.pmTable tbody tr:hover td {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+/* UDP row 선택 표시 (없으면 추가) */
+.rowSelected td {
+  background: rgba(74, 108, 255, 0.22);
+}
+
+/* Stage3: Header/Body 2단 구성 */
+.pmStage3Header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.pmStage3Title {
+  font-size: 13px;
+  font-weight: 700;
+  opacity: 0.9;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.06);
+  opacity: 0.9;
+}
+
+.pmStage3Body {
+  flex: 1;
+  min-height: 0;
+}
+
+.pmStage3Empty {
+  height: 100%;
+  border-radius: 10px;
+  border: 1px dashed rgba(255, 255, 255, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.7;
+  font-size: 12px;
+}
+
+/* 2열 폼 그리드 */
+.pmFormGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.pmField {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.pmField.span2 {
+  grid-column: span 2;
+}
+
+.pmLabel2 {
+  font-size: 11px;
+  opacity: 0.75;
+}
+
+.pmInput2 {
+  height: 30px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(0, 0, 0, 0.25);
+  color: #e9ecff;
+  padding: 0 10px;
+  outline: none;
+  min-width: 0;
+}
+
+.pmInput2.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas;
+  font-size: 12px;
+}
+
+.pmStage3Sub {
+  opacity: 0.8;
+  font-size: 12px;
+  margin-left: 8px;
+}
+
+/* 3컬럼 그리드 */
+.pmFormGrid3 {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 12px;
+  align-items: end;
+}

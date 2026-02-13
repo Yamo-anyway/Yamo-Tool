@@ -84,22 +84,33 @@ export default function PM100Discovery() {
 
   // ✅ IPC 이벤트 구독 (onUdp에서 upsertDevice)
   useEffect(() => {
-    const offLog = window.api.pm100.onLog((line: string) => appendLog(line));
-    const offUdp = window.api.pm100.onUdp((p: any) => {
-      if (p.mac) {
+    const offLog = window.api.pm100.discovery.onLog((line: string) =>
+      appendLog(line),
+    );
+
+    const offUdp = window.api.pm100.discovery.onUdp((p: unknown) => {
+      if (p && typeof p === "object" && "mac" in p) {
+        const pp = p as any;
         upsertDevice({
-          mac: p.mac,
-          ip: p.ip,
-          serverIp: p.serverIp,
-          subnetMask: p.subnetMask,
-          gateway: p.gateway,
-          serverPort: p.serverPort,
-          version: p.version,
+          mac: pp.mac,
+          ip: pp.ip,
+          serverIp: pp.serverIp,
+          subnetMask: pp.subnetMask,
+          gateway: pp.gateway,
+          serverPort: pp.serverPort,
+          version: pp.version,
         });
-        appendLog(`Device: ${p.mac} ${p.ip}`);
-      } else {
-        appendLog(`RX raw ${p.from} (${p.size} bytes)`);
+        appendLog(`Device: ${pp.mac} ${pp.ip}`);
+        return;
       }
+
+      if (p && typeof p === "object" && "from" in p) {
+        const pp = p as any;
+        appendLog(`RX raw ${pp.from} (${pp.size} bytes)`);
+        return;
+      }
+
+      appendLog(`RX unknown payload`);
     });
 
     return () => {
@@ -110,15 +121,13 @@ export default function PM100Discovery() {
   }, []);
 
   // ✅ 스캔 종료(자동/수동 공용)
-
   const stopScan = async (reason: "auto" | "manual") => {
     if (!isScanningRef.current) return;
 
-    // ✅ 먼저 내려서 stop이 중복 호출되는 것 방지
     isScanningRef.current = false;
 
     try {
-      await window.api.pm100.scanStop(); // ✅ stop은 stop!
+      await window.api.pm100.discovery.scanStop();
     } catch (err: any) {
       appendLog(`Stop error: ${err?.message ?? err}`);
     }
@@ -135,11 +144,18 @@ export default function PM100Discovery() {
     }
   };
 
-  // ✅ Scan: 5초 카운트다운 시작, 0되면 자동 stop
+  // ✅ countdown이 0이 되면 effect에서 자동 stop
+  useEffect(() => {
+    if (isScanning && countdown <= 0) {
+      stopScan("auto");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [countdown, isScanning]);
+
+  // ✅ Scan: 카운트다운 시작
   const onScan = async () => {
     if (isScanningRef.current) return;
 
-    // ✅ Scan 시작할 때 목록 초기화
     setDevices([]);
     setSelectedMac(null);
 
@@ -151,7 +167,7 @@ export default function PM100Discovery() {
     appendLog("Scan started");
 
     try {
-      await window.api.pm100.scanStart();
+      await window.api.pm100.discovery.scanStart();
     } catch (err: any) {
       appendLog(`Scan error: ${err?.message ?? err}`);
       isScanningRef.current = false;
@@ -160,17 +176,8 @@ export default function PM100Discovery() {
       return;
     }
 
-    // 1초마다 감소, 0 되면 자동 Stop
     countdownTimerRef.current = window.setInterval(() => {
-      setCountdown((prev) => {
-        const next = prev - 1;
-        if (next <= 0) {
-          // ✅ interval 내부에서 바로 자동 stop 호출
-          stopScan("auto");
-          return 0;
-        }
-        return next;
-      });
+      setCountdown((prev) => Math.max(0, prev - 1));
     }, 1000);
   };
 
@@ -196,7 +203,10 @@ export default function PM100Discovery() {
       return;
     }
 
-    const ok = await window.api.pm100.resetDevice(device.ip, device.mac);
+    const ok = await window.api.pm100.discovery.resetDevice(
+      device.ip,
+      device.mac,
+    );
 
     if (ok) appendLog(`Reset requested -> ${device.ip} (${device.mac})`);
     else appendLog(`Reset failed -> ${device.ip} (${device.mac})`);
@@ -207,12 +217,10 @@ export default function PM100Discovery() {
     [devices],
   );
 
-  // ✅ 화면 다른 곳 클릭하면 선택 해제
   const onRootMouseDown = () => {
     if (selectedMac) setSelectedMac(null);
   };
 
-  // ✅ 테이블 영역 클릭은 선택 해제 트리거 막기
   const stop = (e: React.MouseEvent) => e.stopPropagation();
 
   return (
@@ -250,7 +258,7 @@ export default function PM100Discovery() {
 
         <button
           className="pmBtn primary"
-          onMouseDown={(e) => e.stopPropagation()} // ✅ 중요
+          onMouseDown={(e) => e.stopPropagation()}
           style={{ marginLeft: 10 }}
           onClick={onResetDevice}
           disabled={!selectedMac}

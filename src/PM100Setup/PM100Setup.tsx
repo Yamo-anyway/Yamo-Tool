@@ -8,7 +8,6 @@ type DeviceRow = {
   s2: number;
   s3: number;
 
-  // 나중에 쓸 값들
   subnet: string;
   gateway: string;
   serverIp: string;
@@ -19,6 +18,22 @@ type DeviceRow = {
   sensorStatus: [number, number, number];
   lastSeenAt: number;
 };
+
+type DeviceFrame = {
+  deviceIp?: string;
+  subnet?: string;
+  gateway?: string;
+  serverIp?: string;
+  serverPort?: number;
+  sensorNcNo?: [number, number, number];
+  sensorEnable?: [number, number, number];
+  sensorCheckTime?: [number, number, number];
+  sensorStatus?: [number, number, number];
+};
+
+function isDeviceFrame(v: unknown): v is DeviceFrame {
+  return !!v && typeof v === "object" && "deviceIp" in v;
+}
 
 export default function PM100Setup() {
   const [devices, setDevices] = useState<DeviceRow[]>([]);
@@ -45,39 +60,38 @@ export default function PM100Setup() {
 
     const t = window.setInterval(async () => {
       try {
-        const ips = await window.api.pm100setup.getConnectedIps();
+        const ips = await window.api.pm100.setup.getConnectedIps();
         const set = new Set(ips);
-
         setDevices((prev) => prev.filter((d) => set.has(d.ip)));
       } catch {
-        // 연결 목록 조회 실패 시엔 유지(또는 전부 제거 선택)
+        // 조회 실패 시 유지
       }
     }, 1000);
 
     return () => window.clearInterval(t);
   }, [running]);
 
-  // ✅ 로그 구독 (1회)
   useEffect(() => {
-    const off = window.api.pm100setup.onLog((line: string) => appendLog(line));
+    const off = window.api.pm100.setup.onLog((line: string) => appendLog(line));
     return () => off?.();
   }, []);
 
-  // ✅ 상태 구독 (1회) + STATUS EVENT도 앱 로그로 확인
   useEffect(() => {
-    const off = window.api.pm100setup.onStatus((s) => {
+    const off = window.api.pm100.setup.onStatus((s) => {
       setRunning(!!s.running);
-
-      if (!s.running) {
-        setDevices([]); // ✅ 서버 실제 종료 시 초기화
-      }
+      if (!s.running) setDevices([]);
     });
 
     return () => off?.();
   }, []);
-  // ✅ 장치 프레임 수신 → devices upsert
+
   useEffect(() => {
-    const off = window.api.pm100setup.onDevice((f: any) => {
+    const off = window.api.pm100.setup.onDevice((f: unknown) => {
+      if (!isDeviceFrame(f) || !f.deviceIp) {
+        appendLog("Device frame ignored: invalid payload");
+        return;
+      }
+
       const now = new Date();
       const hh = String(now.getHours()).padStart(2, "0");
       const mm = String(now.getMinutes()).padStart(2, "0");
@@ -91,14 +105,14 @@ export default function PM100Setup() {
         s2: f.sensorStatus?.[1] ?? 0,
         s3: f.sensorStatus?.[2] ?? 0,
 
-        subnet: f.subnet,
-        gateway: f.gateway,
-        serverIp: f.serverIp,
-        serverPort: f.serverPort,
-        sensorNcNo: f.sensorNcNo,
-        sensorEnable: f.sensorEnable,
-        sensorCheckTime: f.sensorCheckTime,
-        sensorStatus: f.sensorStatus,
+        subnet: f.subnet ?? "",
+        gateway: f.gateway ?? "",
+        serverIp: f.serverIp ?? "",
+        serverPort: f.serverPort ?? 0,
+        sensorNcNo: f.sensorNcNo ?? [0, 0, 0],
+        sensorEnable: f.sensorEnable ?? [0, 0, 0],
+        sensorCheckTime: f.sensorCheckTime ?? [0, 0, 0],
+        sensorStatus: f.sensorStatus ?? [0, 0, 0],
         lastSeenAt: Date.now(),
       };
 
@@ -116,11 +130,10 @@ export default function PM100Setup() {
     return () => off?.();
   }, []);
 
-  // ✅ 내 IP 목록 로드
   useEffect(() => {
     (async () => {
       try {
-        const ips = await window.api.pm100setup.getLocalIPv4s();
+        const ips = await window.api.pm100.setup.getLocalIPv4s();
         setLocalIps(ips);
         appendLog(`Local IPs: ${ips.join(", ")}`);
       } catch (e: any) {
@@ -129,21 +142,20 @@ export default function PM100Setup() {
     })();
   }, []);
 
-  // ✅ 로그 자동 스크롤
   useEffect(() => {
     if (textAreaRef.current)
       textAreaRef.current.scrollTop = textAreaRef.current.scrollHeight;
   }, [log]);
 
-  // ✅ 화면 나갈 때 서버 종료
   useEffect(() => {
     return () => {
-      window.api.pm100setup.stopServer().catch(() => {});
+      window.api.pm100.setup.stopServer().catch(() => {});
     };
   }, []);
 
+  const requiredIp = "192.168.1.100";
   const hasRequiredIp = useMemo(
-    () => localIps.includes("192.168.1.100"),
+    () => localIps.includes(requiredIp),
     [localIps],
   );
 
@@ -153,27 +165,26 @@ export default function PM100Setup() {
     if (!running) {
       if (!hasRequiredIp) {
         appendLog(
-          "Start blocked: required IP 192.168.1.100 not found on this PC.",
+          `Start blocked: required IP ${requiredIp} not found on this PC.`,
         );
         return;
       }
-      await window.api.pm100setup.startServer(port, "192.168.1.100");
-      appendLog(`Server start requested on 192.168.1.100:${port}`);
+      await window.api.pm100.setup.startServer(port, requiredIp);
+      appendLog(`Server start requested on ${requiredIp}:${port}`);
     } else {
-      await window.api.pm100setup.stopServer();
-      setDevices([]); // ✅ 리스트 초기화
+      await window.api.pm100.setup.stopServer();
+      setDevices([]);
       appendLog("Server stop requested");
     }
   };
 
   const onBack = async () => {
     try {
-      await window.api.pm100setup.stopServer();
+      await window.api.pm100.setup.stopServer();
     } catch {}
     window.location.hash = "#/";
   };
 
-  // ✅ 최신 수신순 정렬
   const sortedDevices = useMemo(
     () => [...devices].sort((a, b) => b.lastSeenAt - a.lastSeenAt),
     [devices],
@@ -216,20 +227,19 @@ export default function PM100Setup() {
                 ? running
                   ? "Stop TCP server"
                   : "Start TCP server"
-                : "Start blocked: IP 192.168.1.100 is not on this PC"
+                : `Start blocked: IP ${requiredIp} is not on this PC`
             }
           >
             {running ? "Stop" : "Start"}
           </button>
 
           <div className={`pmSetupHint ${hasRequiredIp ? "ok" : "bad"}`}>
-            {hasRequiredIp ? "IP OK (192.168.1.100)" : "Need IP: 192.168.1.100"}
+            {hasRequiredIp ? `IP OK (${requiredIp})` : `Need IP: ${requiredIp}`}
           </div>
         </div>
       </div>
 
       <div className="pmSetupBody">
-        {/* ✅ List */}
         <section className="pmSetupPanel">
           <div className="pmSetupPanelHeader">Devices</div>
           <div className="pmSetupPanelBox">
@@ -268,7 +278,6 @@ export default function PM100Setup() {
 
         <div className="pmSetupSpacer" />
 
-        {/* Log */}
         <section className="pmSetupPanel">
           <div className="pmSetupPanelHeader">Log</div>
           <textarea

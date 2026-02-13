@@ -1,9 +1,12 @@
 import { app, BrowserWindow } from "electron";
 import path from "path";
 import { fileURLToPath } from "url";
-import { registerPM100DiscoveryMainIPC } from "./PM100Discovery/ipcMain";
-import { registerPM100SetupMainIPC } from "./PM100Setup/ipcMain";
-import { stopPM100SetupServer } from "./PM100Setup/ipcMain";
+import { registerPM100DiscoveryMainIPC } from "./features/pm100/discovery/ipcMain";
+import {
+  registerPM100SetupMainIPC,
+  stopPM100SetupServer,
+} from "./features/pm100/setup/ipcMain";
+import { registerPM100ToolUdpMainIPC } from "./features/pm100/tool/udp/ipcMain";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -12,16 +15,17 @@ let win: BrowserWindow | null = null;
 
 function createWindow() {
   win = new BrowserWindow({
-    width: 900,
-    height: 700,
+    width: 1140,
+    height: 800,
     title: "Launcher",
     webPreferences: {
       preload: path.join(__dirname, "preload.mjs"),
     },
   });
 
-  win.on("close", () => {
-    stopPM100SetupServer(); // ✅ 창 닫기 전에 서버 종료
+  // ✅ 여기서는 best-effort로만 (앱 종료 흐름 제어는 window-all-closed에서)
+  win.on("closed", () => {
+    win = null;
   });
 
   const devUrl = process.env.VITE_DEV_SERVER_URL;
@@ -32,20 +36,19 @@ function createWindow() {
 app.whenReady().then(() => {
   createWindow();
 
-  // ✅ PM100 IPC 등록(관련 로직은 electron/PM100Discovery에만 존재)
   registerPM100DiscoveryMainIPC(() => win);
   registerPM100SetupMainIPC(() => win);
+  registerPM100ToolUdpMainIPC(() => win);
+
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
 });
 
-app.on("window-all-closed", () => {
+// ✅ 종료는 여기서 한 번만 책임지고 정리
+app.on("window-all-closed", async () => {
+  await stopPM100SetupServer();
   if (process.platform !== "darwin") app.quit();
-});
-
-app.on("before-quit", () => {
-  stopPM100SetupServer();
 });
 
 process.on("uncaughtException", (err) => {
