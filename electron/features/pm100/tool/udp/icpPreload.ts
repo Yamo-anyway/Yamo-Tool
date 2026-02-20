@@ -1,78 +1,53 @@
-import { ipcRenderer } from "electron";
-import { PM100_CHANNELS } from "../../../../ipc/channels";
+import { contextBridge, ipcRenderer } from "electron";
 
-export type PM100ToolUdpDevicePayload = {
-  from: string;
-  size: number;
+type Unsubscribe = () => void;
 
-  // 표시용
-  mac: string;
-  ip: string;
-  serverIp: string;
-  subnetMask: string;
-  gateway: string;
-  serverPort: number;
-  version: string;
-
-  // 설정용 bytes
-  tagBytes: number[];
-  macBytes: number[];
-  cmd: number;
-  versionBytes: number[];
-  ipBytes: number[];
-  serverIpBytes: number[];
-  temp4Bytes: number[];
-  subnetBytes: number[];
-  gatewayBytes: number[];
-  serverPortBytes: number[];
-  temp2Bytes: number[];
-  active: number;
-  mode: number;
-  auth: number;
-  tamper: number;
-  temp3Bytes: number[];
-
-  rawBytes: Uint8Array;
+export type UdpScanStartOptions = {
+  port?: number; // send port (default 1500)
+  intervalMs?: number; // default 2000
+  count?: number; // default 5
 };
 
-export const pm100toolUdpApi = {
-  scanStart: () =>
-    ipcRenderer.invoke(PM100_CHANNELS.tool.udp.scanStart) as Promise<boolean>,
+export function registerPM100ToolUdpPreload() {
+  const udpApi = {
+    scanStart: (opts?: UdpScanStartOptions) =>
+      ipcRenderer.invoke("pm100:udp:scanStart", opts ?? {}) as Promise<boolean>,
 
-  scanStop: () =>
-    ipcRenderer.invoke(PM100_CHANNELS.tool.udp.scanStop) as Promise<boolean>,
+    scanStop: () =>
+      ipcRenderer.invoke("pm100:udp:scanStop") as Promise<boolean>,
 
-  onLog: (cb: (line: string) => void) => {
-    const handler = (_: any, line: string) => cb(line);
-    ipcRenderer.on(PM100_CHANNELS.tool.udp.log, handler);
-    return () =>
-      ipcRenderer.removeListener(PM100_CHANNELS.tool.udp.log, handler);
-  },
+    onDiscovered: (cb: (row: any) => void): Unsubscribe => {
+      const handler = (_evt: any, row: any) => cb(row);
+      ipcRenderer.on("pm100:udp:discovered", handler);
+      return () => ipcRenderer.removeListener("pm100:udp:discovered", handler);
+    },
 
-  onUdp: (cb: (p: PM100ToolUdpDevicePayload) => void) => {
-    const handler = (_: any, payload: PM100ToolUdpDevicePayload) => cb(payload);
-    ipcRenderer.on(PM100_CHANNELS.tool.udp.udp, handler);
-    return () =>
-      ipcRenderer.removeListener(PM100_CHANNELS.tool.udp.udp, handler);
-  },
+    onStopped: (cb: (reason: string) => void): Unsubscribe => {
+      const handler = (_evt: any, reason: any) => cb(String(reason ?? ""));
+      ipcRenderer.on("pm100:udp:stopped", handler);
+      return () => ipcRenderer.removeListener("pm100:udp:stopped", handler);
+    },
 
-  resetDevice: (ip: string, mac: string) =>
-    ipcRenderer.invoke(
-      PM100_CHANNELS.tool.udp.reset,
-      ip,
-      mac,
-    ) as Promise<boolean>,
+    onLog: (cb: (line: string) => void): Unsubscribe => {
+      const handler = (_evt: any, line: string) => cb(line);
+      ipcRenderer.on("pm100:udp:log", handler);
+      return () => ipcRenderer.removeListener("pm100:udp:log", handler);
+    },
 
-  updateConfig: (payload: {
-    macStr: string;
-    deviceIp: string;
-    subnetMask: string;
-    gateway: string;
-    serverIp: string;
-    serverPort: number;
-  }) =>
-    ipcRenderer.invoke(
-      PM100_CHANNELS.tool.udp.updateConfig,
-      payload,
-    ) as Promise<boolean>,
-};
+    // raw udp packet/remote info
+    onUdp: (cb: (p: any) => void): Unsubscribe => {
+      const handler = (_evt: any, p: any) => cb(p);
+      ipcRenderer.on("pm100:udp:raw", handler);
+      return () => ipcRenderer.removeListener("pm100:udp:raw", handler);
+    },
+  };
+
+  // 기존 window.api 구조에 맞춰 expose
+  contextBridge.exposeInMainWorld("api", {
+    pm100: {
+      tool: {
+        udp: udpApi,
+      },
+    },
+  });
+}

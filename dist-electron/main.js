@@ -22,14 +22,6 @@ const PM100_CHANNELS = {
     getConnectedIps: "pm100:setup:getConnectedIps"
   },
   tool: {
-    udp: {
-      scanStart: "pm100tool:udp:scanStart",
-      scanStop: "pm100tool:udp:scanStop",
-      log: "pm100tool:udp:log",
-      udp: "pm100tool:udp:udp",
-      reset: "pm100tool:udp:reset",
-      updateConfig: "pm100tool:udp:updateConfig"
-    },
     log: {
       openWindow: "pm100tool:log:openWindow",
       append: "pm100tool:log:append",
@@ -59,7 +51,7 @@ const PM100_CHANNELS = {
     setupGetConnectedIps: "pm100setup:getConnectedIps"
   }
 };
-const PM100_PORT = 1500;
+const PM100_PORT$1 = 1500;
 const SEARCH_MASK$1 = "255.255.255.0";
 function xorChecksum$2(buf) {
   let x = 0;
@@ -115,22 +107,22 @@ function getBroadcastTargets$1(mask) {
   if (targets.size === 0) targets.add("255.255.255.255");
   return Array.from(targets);
 }
-function formatMac(buf, offset) {
+function formatMac$1(buf, offset) {
   return [...buf.slice(offset, offset + 6)].map((b) => b.toString(16).padStart(2, "0")).join(":").toUpperCase();
 }
-function formatIp(buf, offset) {
+function formatIp$1(buf, offset) {
   return [...buf.slice(offset, offset + 4)].join(".");
 }
-function parsePM100Response(msg) {
+function parsePM100Response$1(msg) {
   if (msg.length < 46) return null;
   const tag = msg.slice(0, 6).toString("ascii");
   if (tag !== "CG_RES") return null;
-  const mac = formatMac(msg, 6);
+  const mac = formatMac$1(msg, 6);
   const version = `${msg[13]}.${msg[14]}`;
-  const ip2 = formatIp(msg, 15);
-  const serverIp = formatIp(msg, 19);
-  const subnetMask = formatIp(msg, 27);
-  const gateway = formatIp(msg, 31);
+  const ip2 = formatIp$1(msg, 15);
+  const serverIp = formatIp$1(msg, 19);
+  const subnetMask = formatIp$1(msg, 27);
+  const gateway = formatIp$1(msg, 31);
   const serverPort = msg.readUInt16BE(35);
   return { mac, ip: ip2, serverIp, subnetMask, gateway, serverPort, version };
 }
@@ -155,7 +147,7 @@ class PM100Scanner {
       this.stop();
     });
     socket.on("message", (msg, rinfo) => {
-      const parsed = parsePM100Response(msg);
+      const parsed = parsePM100Response$1(msg);
       if (parsed) {
         this.onUdp({
           from: `${rinfo.address}:${rinfo.port}`,
@@ -171,13 +163,13 @@ class PM100Scanner {
         });
       }
     });
-    socket.bind(PM100_PORT, () => {
+    socket.bind(PM100_PORT$1, () => {
       const packet = buildDiscoveryPacket$1();
       socket.setBroadcast(true);
       socket.setRecvBufferSize(1024 * 1024);
       const targets = getBroadcastTargets$1(SEARCH_MASK$1);
       this.onLog(
-        `Scan start: port=${PM100_PORT}, mask=${SEARCH_MASK$1}, targets=${targets.join(", ")}`
+        `Scan start: port=${PM100_PORT$1}, mask=${SEARCH_MASK$1}, targets=${targets.join(", ")}`
       );
       this.onLog(
         `Send ${packet.length} bytes: ${packet.toString("hex").match(/.{1,2}/g)?.join(" ")}`
@@ -185,10 +177,10 @@ class PM100Scanner {
       const sendOnce = () => {
         const packet2 = buildDiscoveryPacket$1();
         for (const host of targets) {
-          socket.send(packet2, PM100_PORT, host, (err) => {
+          socket.send(packet2, PM100_PORT$1, host, (err) => {
             if (err)
-              this.onLog(`Send fail -> ${host}:${PM100_PORT} : ${err.message}`);
-            else this.onLog(`Sent -> ${host}:${PM100_PORT}`);
+              this.onLog(`Send fail -> ${host}:${PM100_PORT$1} : ${err.message}`);
+            else this.onLog(`Sent -> ${host}:${PM100_PORT$1}`);
           });
         }
       };
@@ -227,17 +219,17 @@ class PM100Scanner {
   }
   sendReset(deviceIp, mac) {
     const socket = this.ensureCmdSocket();
-    const packet = buildResetPacket$1(mac);
+    const packet = buildResetPacket(mac);
     const bcast = broadcastByMask$1(deviceIp, SEARCH_MASK$1);
     this.onLog(
-      `Reset TX (broadcast) -> ${bcast}:${PM100_PORT} (${packet.length} bytes)`
+      `Reset TX (broadcast) -> ${bcast}:${PM100_PORT$1} (${packet.length} bytes)`
     );
-    socket.send(packet, PM100_PORT, bcast, (err) => {
+    socket.send(packet, PM100_PORT$1, bcast, (err) => {
       if (err)
         this.onLog(
-          `Reset send fail -> ${bcast}:${PM100_PORT} : ${err.message}`
+          `Reset send fail -> ${bcast}:${PM100_PORT$1} : ${err.message}`
         );
-      else this.onLog(`Reset sent -> ${bcast}:${PM100_PORT}`);
+      else this.onLog(`Reset sent -> ${bcast}:${PM100_PORT$1}`);
     });
   }
   ensureCmdSocket() {
@@ -251,48 +243,48 @@ class PM100Scanner {
       }
       if (this.cmdSocket === s) this.cmdSocket = null;
     });
-    s.bind(PM100_PORT, "0.0.0.0", () => {
+    s.bind(PM100_PORT$1, "0.0.0.0", () => {
       s.setBroadcast(true);
-      this.onLog(`CMD socket ready on 0.0.0.0:${PM100_PORT}`);
+      this.onLog(`CMD socket ready on 0.0.0.0:${PM100_PORT$1}`);
     });
     this.cmdSocket = s;
     return s;
   }
 }
-function buildResetPacket$1(macStr) {
+function buildResetPacket(macStr) {
   const mac = Buffer.from(macStr.split(":").map((h) => parseInt(h, 16)));
   const cmd = Buffer.from("Camguard_Initialize", "ascii");
   return Buffer.concat([mac, cmd]);
 }
-let scanner$1 = null;
-function send$1(getWin, channel, payload) {
+let scanner = null;
+function send(getWin, channel, payload) {
   const w = getWin();
   if (!w) return;
   w.webContents.send(channel, payload);
 }
 function registerPM100DiscoveryMainIPC(getWin) {
   const ensureScanner = () => {
-    if (!scanner$1) {
-      scanner$1 = new PM100Scanner(
+    if (!scanner) {
+      scanner = new PM100Scanner(
         // ✅ 새 채널로 송신 + (선택) legacy도 같이 송신
         (line) => {
-          send$1(getWin, PM100_CHANNELS.discovery.log, line);
-          send$1(getWin, PM100_CHANNELS.legacy.discoveryLog, line);
+          send(getWin, PM100_CHANNELS.discovery.log, line);
+          send(getWin, PM100_CHANNELS.legacy.discoveryLog, line);
         },
         (payload) => {
-          send$1(getWin, PM100_CHANNELS.discovery.udp, payload);
-          send$1(getWin, PM100_CHANNELS.legacy.discoveryUdp, payload);
+          send(getWin, PM100_CHANNELS.discovery.udp, payload);
+          send(getWin, PM100_CHANNELS.legacy.discoveryUdp, payload);
         }
       );
     }
-    return scanner$1;
+    return scanner;
   };
   const scanStartHandler = () => {
     ensureScanner().start();
     return true;
   };
   const scanStopHandler = () => {
-    if (scanner$1) scanner$1.stop();
+    if (scanner) scanner.stop();
     return true;
   };
   const resetHandler = (_evt, ip2, mac) => {
@@ -606,12 +598,15 @@ async function stopPM100SetupServer() {
     server = null;
   }
 }
-const PM100_TOOL_UDP_PORT = 1500;
+const PM100_PORT = 1500;
 const SEARCH_MASK = "255.255.255.0";
 function xorChecksum(buf) {
   let x = 0;
   for (const b of buf) x ^= b;
   return x & 255;
+}
+function toHex(bytes) {
+  return Array.from(bytes).map((b) => b.toString(16).padStart(2, "0")).join(" ");
 }
 function buildDiscoveryPacket() {
   const body = Buffer.from([
@@ -621,18 +616,17 @@ function buildDiscoveryPacket() {
     67,
     77,
     68,
+    // "CG_CMD"
     0,
     0,
     0,
     0,
     0,
     0
+    // MAC 6 bytes (0)
   ]);
   const cs = xorChecksum(body);
   return Buffer.concat([body, Buffer.from([cs])]);
-}
-function bytes(buf, offset, len) {
-  return Array.from(buf.slice(offset, offset + len));
 }
 function ipToU32(ip2) {
   const [a, b, c, d] = ip2.split(".").map((x) => parseInt(x, 10));
@@ -665,256 +659,205 @@ function getBroadcastTargets(mask) {
   if (targets.size === 0) targets.add("255.255.255.255");
   return Array.from(targets);
 }
-function ipStrToBytes(ip2) {
-  return ip2.trim().split(".").map((x) => Number(x) & 255);
+function formatMac(msg, offset) {
+  return Array.from(msg.slice(offset, offset + 6)).map((b) => b.toString(16).padStart(2, "0")).join(":").toUpperCase();
 }
-function buildUpdatePacket(args) {
-  const tag = Buffer.from("CG_CMD", "ascii");
-  const mac = Buffer.from(args.macStr.split(":").map((h) => parseInt(h, 16)));
-  const cmd = Buffer.from([14]);
-  const devIp = Buffer.from(ipStrToBytes(args.deviceIp));
-  const subnet = Buffer.from(ipStrToBytes(args.subnetMask));
-  const gateway = Buffer.from(ipStrToBytes(args.gateway));
-  const serverIp = Buffer.from(ipStrToBytes(args.serverIp));
-  const port = Buffer.from([
-    args.serverPort >> 8 & 255,
-    args.serverPort & 255
-  ]);
-  const body = Buffer.concat([
-    tag,
-    mac,
-    cmd,
-    devIp,
-    subnet,
-    gateway,
-    serverIp,
-    port
-  ]);
-  const cs = xorChecksum(body);
-  return Buffer.concat([body, Buffer.from([cs])]);
+function formatIp(msg, offset) {
+  return `${msg[offset]}.${msg[offset + 1]}.${msg[offset + 2]}.${msg[offset + 3]}`;
 }
-function parseResponse(msg) {
+function parsePM100Response(msg) {
   if (msg.length < 46) return null;
-  const tagAscii = msg.slice(0, 6).toString("ascii");
-  if (tagAscii !== "CG_RES") return null;
-  const tagBytes = bytes(msg, 0, 6);
-  const macBytes = bytes(msg, 6, 6);
-  const cmd = msg[12] & 255;
-  const versionBytes = bytes(msg, 13, 2);
-  const ipBytes = bytes(msg, 15, 4);
-  const serverIpBytes = bytes(msg, 19, 4);
-  const temp4Bytes = bytes(msg, 23, 4);
-  const subnetBytes = bytes(msg, 27, 4);
-  const gatewayBytes = bytes(msg, 31, 4);
-  const serverPortBytes = bytes(msg, 35, 2);
-  const temp2Bytes = bytes(msg, 37, 2);
-  const active = msg[39] & 255;
-  const mode = msg[40] & 255;
-  const auth = msg[41] & 255;
-  const tamper = msg[42] & 255;
-  const temp3Bytes = bytes(msg, 43, 3);
-  const mac = macBytes.map((b) => b.toString(16).padStart(2, "0")).join(":");
-  const ip2 = ipBytes.join(".");
-  const serverIp = serverIpBytes.join(".");
-  const subnetMask = subnetBytes.join(".");
-  const gateway = gatewayBytes.join(".");
+  const tag = msg.slice(0, 6).toString("ascii");
+  if (tag !== "CG_RES") return null;
+  const mac = formatMac(msg, 6);
+  const version = `${msg[13]}.${msg[14]}`;
+  const ip2 = formatIp(msg, 15);
+  const serverIp = formatIp(msg, 19);
+  const subnetMask = formatIp(msg, 27);
+  const gateway = formatIp(msg, 31);
   const serverPort = msg.readUInt16BE(35);
-  const version = `${versionBytes[0]}.${versionBytes[1]}`;
+  return { mac, ip: ip2, serverIp, subnetMask, gateway, serverPort, version };
+}
+function toDeviceRow(info, rawBytes) {
   return {
-    from: "",
-    size: msg.length,
-    mac,
-    ip: ip2,
-    serverIp,
-    subnetMask,
-    gateway,
-    serverPort,
-    version,
-    tagBytes,
-    macBytes,
-    cmd,
-    versionBytes,
-    ipBytes,
-    serverIpBytes,
-    temp4Bytes,
-    subnetBytes,
-    gatewayBytes,
-    serverPortBytes,
-    temp2Bytes,
-    active,
-    mode,
-    auth,
-    tamper,
-    temp3Bytes,
-    rawBytes: new Uint8Array(msg)
+    type: "UDP",
+    // ✅ 여기 추가
+    macStr: info.mac,
+    deviceIpStr: info.ip,
+    serverIpStr: info.serverIp,
+    subnetStr: info.subnetMask,
+    gatewayStr: info.gateway,
+    serverPort: info.serverPort,
+    raw: {
+      rawBytes,
+      version: info.version
+    }
   };
 }
-function buildResetPacket(macStr) {
-  const mac = Buffer.from(macStr.split(":").map((h) => parseInt(h, 16)));
-  const cmd = Buffer.from("Camguard_Initialize", "ascii");
-  return Buffer.concat([mac, cmd]);
-}
-class PM100ToolUdpScanner {
-  constructor(onLog, onDevice) {
-    this.onLog = onLog;
-    this.onDevice = onDevice;
+function createPM100UdpScanner(events) {
+  let socket = null;
+  let timer = null;
+  let running = false;
+  const deviceMap = /* @__PURE__ */ new Map();
+  const defaults = {
+    intervalMs: 2e3,
+    count: 5,
+    mask: SEARCH_MASK
+  };
+  function cleanup(reason) {
+    running = false;
+    if (timer) {
+      clearInterval(timer);
+      timer = null;
+    }
+    if (socket) {
+      socket.removeAllListeners();
+      try {
+        socket.close();
+      } catch {
+      }
+      socket = null;
+    }
+    if (reason) events.log(`udp scan stopped: ${reason}`);
+    if (reason !== "restart") {
+      events.stopped({ reason: reason ?? "", found: deviceMap.size });
+    }
+    deviceMap.clear();
   }
-  socket = null;
-  resendTimer = null;
-  cmdSocket = null;
-  start() {
-    if (this.socket) return;
-    const socket = dgram.createSocket({ type: "udp4", reuseAddr: true });
-    this.socket = socket;
+  async function start(opts) {
+    if (running) {
+      events.log("scanStart ignored: already running");
+      return;
+    }
+    const intervalMs = Number(opts?.intervalMs ?? defaults.intervalMs);
+    const countMax = Number(opts?.count ?? defaults.count);
+    const mask = String(opts?.mask ?? defaults.mask);
+    cleanup("restart");
+    running = true;
+    socket = dgram.createSocket({ type: "udp4", reuseAddr: true });
     socket.on("error", (err) => {
-      this.onLog(`UDP error: ${err.message}`);
-      this.stop();
+      events.log(`UDP error: ${err.message}`);
+      cleanup("socket error");
     });
     socket.on("message", (msg, rinfo) => {
-      const parsed = parseResponse(msg);
-      if (!parsed) return;
-      parsed.from = `${rinfo.address}:${rinfo.port}`;
-      parsed.size = msg.length;
-      this.onDevice(parsed);
+      if (!running) return;
+      events.log(`UDP RX: ${rinfo.address}:${rinfo.port}  ${toHex(msg)}`);
+      events.raw({
+        from: {
+          address: rinfo.address,
+          port: rinfo.port,
+          family: rinfo.family,
+          size: rinfo.size
+        },
+        bytes: Array.from(msg)
+      });
+      const info = parsePM100Response(msg);
+      if (!info) return;
+      const row = toDeviceRow(info, new Uint8Array(msg));
+      const prev = deviceMap.get(row.macStr);
+      deviceMap.set(row.macStr, row);
+      if (!prev || prev.deviceIpStr !== row.deviceIpStr || prev.serverIpStr !== row.serverIpStr || prev.serverPort !== row.serverPort) {
+        events.discovered(row);
+      }
     });
-    socket.bind(PM100_TOOL_UDP_PORT, () => {
-      socket.setBroadcast(true);
-      socket.setRecvBufferSize(1024 * 1024);
-      const targets = getBroadcastTargets(SEARCH_MASK);
+    await new Promise((resolve, reject) => {
+      try {
+        socket.bind(PM100_PORT, () => {
+          try {
+            socket.setBroadcast(true);
+            socket.setRecvBufferSize(1024 * 1024);
+          } catch {
+          }
+          resolve();
+        });
+      } catch (e) {
+        reject(e);
+      }
+    });
+    const targets = getBroadcastTargets(mask);
+    events.log(
+      `Scan start: port=${PM100_PORT}, mask=${mask}, targets=${targets.join(", ")}`
+    );
+    const sendOnce = () => {
+      if (!socket || !running) return;
       const packet = buildDiscoveryPacket();
-      const sendOnce = () => {
-        for (const host of targets) {
-          socket.send(packet, PM100_TOOL_UDP_PORT, host);
-        }
-      };
+      events.log(`UDP TX: ${toHex(packet)}`);
+      for (const host of targets) {
+        socket.send(packet, PM100_PORT, host, (err) => {
+          if (err) {
+            events.log(`Send fail -> ${host}:${PM100_PORT} : ${err.message}`);
+          } else {
+            events.log(`Sent -> ${host}:${PM100_PORT}`);
+          }
+        });
+      }
+    };
+    let count = 1;
+    sendOnce();
+    timer = setInterval(() => {
+      count += 1;
+      if (count > countMax) {
+        cleanup("completed");
+        return;
+      }
+      events.log(`Resend (${count}/${countMax})`);
       sendOnce();
-      let count = 1;
-      this.resendTimer = setInterval(() => {
-        count++;
-        if (count > 5) {
-          clearInterval(this.resendTimer);
-          this.resendTimer = null;
-          return;
-        }
-        this.onLog(`Resend (${count}/5)`);
-        sendOnce();
-      }, 2e3);
-    });
+    }, intervalMs);
   }
-  stop() {
-    if (!this.socket) return;
-    if (this.resendTimer) {
-      clearInterval(this.resendTimer);
-      this.resendTimer = null;
-    }
-    try {
-      this.socket.removeAllListeners();
-      this.socket.close();
-    } catch {
-    }
-    this.socket = null;
-    this.onLog("UDP scan stopped");
-    if (this.cmdSocket) {
-      try {
-        this.cmdSocket.removeAllListeners();
-        this.cmdSocket.close();
-      } catch {
-      }
-      this.cmdSocket = null;
-    }
+  function stop(reason) {
+    if (!running) return;
+    cleanup(reason ?? "manual stop");
   }
-  ensureCmdSocket() {
-    if (this.cmdSocket) return this.cmdSocket;
-    const s = dgram.createSocket({ type: "udp4", reuseAddr: true });
-    s.on("error", (err) => {
-      this.onLog(`CMD UDP error: ${err.message}`);
-      try {
-        s.close();
-      } catch {
-      }
-      if (this.cmdSocket === s) this.cmdSocket = null;
-    });
-    s.bind(PM100_TOOL_UDP_PORT, "0.0.0.0", () => {
-      s.setBroadcast(true);
-      this.onLog(`CMD socket ready on 0.0.0.0:${PM100_TOOL_UDP_PORT}`);
-    });
-    this.cmdSocket = s;
-    return s;
-  }
-  sendReset(deviceIp, mac) {
-    const socket = this.ensureCmdSocket();
-    const packet = buildResetPacket(mac);
-    const bcast = broadcastByMask(deviceIp, SEARCH_MASK);
-    this.onLog(
-      `Reset TX (broadcast) -> ${bcast}:${PM100_TOOL_UDP_PORT} (${packet.length} bytes)`
-    );
-    socket.send(packet, PM100_TOOL_UDP_PORT, bcast, (err) => {
-      if (err)
-        this.onLog(
-          `Reset send fail -> ${bcast}:${PM100_TOOL_UDP_PORT} : ${err.message}`
-        );
-      else this.onLog(`Reset sent -> ${bcast}:${PM100_TOOL_UDP_PORT}`);
-    });
-  }
-  sendUpdateConfig(p) {
-    const socket = this.ensureCmdSocket();
-    const packet = buildUpdatePacket(p);
-    const host = p.deviceIp;
-    this.onLog(
-      `Update TX -> ${host}:${PM100_TOOL_UDP_PORT} (${packet.length} bytes)`
-    );
-    socket.send(packet, PM100_TOOL_UDP_PORT, host, (err) => {
-      if (err)
-        this.onLog(
-          `Update send fail -> ${host}:${PM100_TOOL_UDP_PORT} : ${err.message}`
-        );
-      else this.onLog(`Update sent -> ${host}:${PM100_TOOL_UDP_PORT}`);
-    });
-  }
-}
-let scanner = null;
-function send(getWin, channel, payload) {
-  const w = getWin();
-  if (!w) return;
-  w.webContents.send(channel, payload);
+  return { start, stop, isRunning: () => running };
 }
 function registerPM100ToolUdpMainIPC(getWin) {
-  const ensureScanner = () => {
-    if (!scanner) {
-      scanner = new PM100ToolUdpScanner(
-        (line) => send(getWin, PM100_CHANNELS.tool.udp.log, line),
-        (payload) => send(getWin, PM100_CHANNELS.tool.udp.udp, payload)
-      );
+  if (globalThis.__pm100_tool_udp_ipc_registered) return;
+  globalThis.__pm100_tool_udp_ipc_registered = true;
+  const events = {
+    log: (line) => {
+      const win2 = getWin();
+      if (!win2 || win2.isDestroyed()) return;
+      win2.webContents.send("pm100:udp:log", line);
+    },
+    raw: (payload) => {
+      const win2 = getWin();
+      if (!win2 || win2.isDestroyed()) return;
+      win2.webContents.send("pm100:udp:raw", payload);
+    },
+    discovered: (row) => {
+      const win2 = getWin();
+      if (!win2 || win2.isDestroyed()) return;
+      win2.webContents.send("pm100:udp:discovered", row);
+    },
+    stopped: (payload) => {
+      const win2 = getWin();
+      if (!win2 || win2.isDestroyed()) return;
+      win2.webContents.send("pm100:udp:stopped", payload);
     }
-    return scanner;
   };
-  ipcMain.handle(PM100_CHANNELS.tool.udp.scanStart, () => {
-    ensureScanner().start();
-    return true;
-  });
-  ipcMain.handle(PM100_CHANNELS.tool.udp.scanStop, () => {
-    if (scanner) {
-      scanner.stop();
-      scanner = null;
-    }
-    return true;
-  });
+  const scanner2 = createPM100UdpScanner(events);
   ipcMain.handle(
-    PM100_CHANNELS.tool.udp.reset,
-    (_evt, ip2, mac) => {
+    "pm100:udp:scanStart",
+    async (_evt, opts) => {
       try {
-        ensureScanner().sendReset(ip2, mac);
+        await scanner2.start(opts);
         return true;
-      } catch {
+      } catch (e) {
+        events.log(`scanStart failed: ${String(e?.message || e)}`);
+        try {
+          scanner2.stop("scanStart failed");
+        } catch {
+        }
         return false;
       }
     }
   );
-  ipcMain.handle(PM100_CHANNELS.tool.udp.updateConfig, (_evt, p) => {
+  ipcMain.handle("pm100:udp:scanStop", async () => {
     try {
-      ensureScanner().sendUpdateConfig(p);
+      scanner2.stop("manual stop");
       return true;
-    } catch {
+    } catch (e) {
+      events.log(`scanStop failed: ${String(e?.message || e)}`);
       return false;
     }
   });
@@ -1012,6 +955,7 @@ function registerPM100ToolLogMainIPC(getMainWin, preloadPath) {
       // ✅ top 창은 parent 없이가 안정적
       show: false,
       // ✅ 로드 후 show
+      acceptFirstMouse: true,
       webPreferences: {
         preload: preloadPath
       }
@@ -1052,6 +996,7 @@ function createWindow() {
     width: 1140,
     height: 800,
     title: "Launcher",
+    acceptFirstMouse: true,
     webPreferences: {
       preload: path.join(__dirname$1, "preload.mjs")
     }

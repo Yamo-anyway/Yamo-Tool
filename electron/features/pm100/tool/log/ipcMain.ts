@@ -159,6 +159,7 @@ export function registerPM100ToolLogMainIPC(
       title: "PM100 Log",
       parent: undefined, // ✅ top 창은 parent 없이가 안정적
       show: false, // ✅ 로드 후 show
+      acceptFirstMouse: true,
       webPreferences: {
         preload: preloadPath,
       },

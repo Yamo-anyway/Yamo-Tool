@@ -26,20 +26,13 @@ declare global {
         };
         tool: {
           udp: {
-            scanStart: () => Promise<boolean>;
-            scanStop: () => Promise<boolean>;
-            onLog: (cb: (line: string) => void) => () => void;
-            onUdp: (cb: (p: any) => void) => () => void;
-            resetDevice: (ip: string, mac: string) => Promise<boolean>;
+            onDiscovered: (cb: (row: DeviceRow) => void) => Unsubscribe;
+            onStopped: (cb: (reason: string) => void) => Unsubscribe;
 
-            updateConfig: (payload: {
-              macStr: string;
-              deviceIp: string;
-              subnetMask: string;
-              gateway: string;
-              serverIp: string;
-              serverPort: number;
-            }) => Promise<boolean>;
+            scanStart: (opts?: UdpScanStartOptions) => Promise<boolean>;
+            scanStop: () => Promise<boolean>;
+
+            onLog: (cb: (line: string) => void) => Unsubscribe;
           };
           log: {
             openWindow: () => Promise<boolean>;

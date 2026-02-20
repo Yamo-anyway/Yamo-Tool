@@ -21,6 +21,7 @@ function createWindow() {
     width: 1140,
     height: 800,
     title: "Launcher",
+    acceptFirstMouse: true,
     webPreferences: {
       preload: path.join(__dirname, "preload.mjs"),
     },

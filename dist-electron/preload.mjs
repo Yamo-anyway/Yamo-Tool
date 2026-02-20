@@ -16,23 +16,6 @@ const PM100_CHANNELS = {
     log: "pm100:setup:log",
     getLocalIPv4s: "pm100:setup:getLocalIPv4s",
     getConnectedIps: "pm100:setup:getConnectedIps"
-  },
-  tool: {
-    udp: {
-      scanStart: "pm100tool:udp:scanStart",
-      scanStop: "pm100tool:udp:scanStop",
-      log: "pm100tool:udp:log",
-      udp: "pm100tool:udp:udp",
-      reset: "pm100tool:udp:reset",
-      updateConfig: "pm100tool:udp:updateConfig"
-    },
-    log: {
-      openWindow: "pm100tool:log:openWindow",
-      append: "pm100tool:log:append",
-      clear: "pm100tool:log:clear",
-      getAll: "pm100tool:log:getAll",
-      updated: "pm100tool:log:updated"
-    }
   }
 };
 const pm100discoveryApi = {
@@ -73,49 +56,36 @@ const pm100setupApi = {
   },
   getConnectedIps: () => electron.ipcRenderer.invoke(PM100_CHANNELS.setup.getConnectedIps)
 };
-const pm100toolUdpApi = {
-  scanStart: () => electron.ipcRenderer.invoke(PM100_CHANNELS.tool.udp.scanStart),
-  scanStop: () => electron.ipcRenderer.invoke(PM100_CHANNELS.tool.udp.scanStop),
-  onLog: (cb) => {
-    const handler = (_, line) => cb(line);
-    electron.ipcRenderer.on(PM100_CHANNELS.tool.udp.log, handler);
-    return () => electron.ipcRenderer.removeListener(PM100_CHANNELS.tool.udp.log, handler);
-  },
-  onUdp: (cb) => {
-    const handler = (_, payload) => cb(payload);
-    electron.ipcRenderer.on(PM100_CHANNELS.tool.udp.udp, handler);
-    return () => electron.ipcRenderer.removeListener(PM100_CHANNELS.tool.udp.udp, handler);
-  },
-  resetDevice: (ip, mac) => electron.ipcRenderer.invoke(
-    PM100_CHANNELS.tool.udp.reset,
-    ip,
-    mac
-  ),
-  updateConfig: (payload) => electron.ipcRenderer.invoke(
-    PM100_CHANNELS.tool.udp.updateConfig,
-    payload
-  )
-};
-const pm100toolLogApi = {
-  openWindow: () => electron.ipcRenderer.invoke(PM100_CHANNELS.tool.log.openWindow),
-  append: (line) => {
-    electron.ipcRenderer.send(PM100_CHANNELS.tool.log.append, line);
-  },
-  clear: () => electron.ipcRenderer.invoke(PM100_CHANNELS.tool.log.clear),
-  getAll: () => electron.ipcRenderer.invoke(PM100_CHANNELS.tool.log.getAll),
-  onUpdated: (cb) => {
-    const handler = (_, allText) => cb(allText);
-    electron.ipcRenderer.on(PM100_CHANNELS.tool.log.updated, handler);
-    return () => electron.ipcRenderer.removeListener(PM100_CHANNELS.tool.log.updated, handler);
-  }
-};
 electron.contextBridge.exposeInMainWorld("api", {
   pm100: {
     discovery: pm100discoveryApi,
     setup: pm100setupApi,
     tool: {
-      udp: pm100toolUdpApi,
-      log: pm100toolLogApi
+      udp: {
+        scanStart: (opts) => electron.ipcRenderer.invoke("pm100:udp:scanStart", opts),
+        scanStop: () => electron.ipcRenderer.invoke("pm100:udp:scanStop"),
+        onDiscovered: (cb) => {
+          const handler = (_evt, row) => cb(row);
+          electron.ipcRenderer.on("pm100:udp:discovered", handler);
+          return () => electron.ipcRenderer.removeListener("pm100:udp:discovered", handler);
+        },
+        // ✅ 수정: (_evt, reason) 형태로 받기
+        // onStopped: (cb: (reason: string) => void) => {
+        //   const handler = (_evt: any, reason: any) => cb(String(reason ?? ""));
+        //   ipcRenderer.on("pm100:udp:stopped", handler);
+        //   return () => ipcRenderer.removeListener("pm100:udp:stopped", handler);
+        // },
+        onStopped: (cb) => {
+          const handler = (_evt, p) => cb(p);
+          electron.ipcRenderer.on("pm100:udp:stopped", handler);
+          return () => electron.ipcRenderer.removeListener("pm100:udp:stopped", handler);
+        },
+        onLog: (cb) => {
+          const handler = (_evt, line) => cb(String(line ?? ""));
+          electron.ipcRenderer.on("pm100:udp:log", handler);
+          return () => electron.ipcRenderer.removeListener("pm100:udp:log", handler);
+        }
+      }
     }
   }
 });

@@ -1,60 +1,75 @@
-import type { BrowserWindow } from "electron";
-import { ipcMain } from "electron";
-import { PM100_CHANNELS } from "../../../../ipc/channels";
-import { PM100ToolUdpScanner } from "./net";
+// electron/features/pm100/tool/udp/ipcMain.ts
+// ✅ PM100 Tool UDP IPC Main (최종본)
+// - ipcMain.handle("pm100:udp:scanStart", opts)
+// - ipcMain.handle("pm100:udp:scanStop")
+// - events -> renderer:
+//   pm100:udp:discovered (row)
+//   pm100:udp:raw (payload)
+//   pm100:udp:log (line)
+//   pm100:udp:stopped (reason)
+
+import { BrowserWindow, ipcMain } from "electron";
+import {
+  createPM100UdpScanner,
+  type UdpScanEvents,
+  type UdpScanStartOptions,
+} from "./net";
 
 type GetWin = () => BrowserWindow | null;
 
-let scanner: PM100ToolUdpScanner | null = null;
-
-function send(getWin: GetWin, channel: string, payload: any) {
-  const w = getWin();
-  if (!w) return;
-  w.webContents.send(channel, payload);
-}
-
 export function registerPM100ToolUdpMainIPC(getWin: GetWin) {
-  const ensureScanner = () => {
-    if (!scanner) {
-      scanner = new PM100ToolUdpScanner(
-        (line) => send(getWin, PM100_CHANNELS.tool.udp.log, line),
-        (payload) => send(getWin, PM100_CHANNELS.tool.udp.udp, payload),
-      );
-    }
-    return scanner;
+  // ✅ 중복 등록 방지(개발 중 핫리로드/재실행 대비)
+  if ((globalThis as any).__pm100_tool_udp_ipc_registered) return;
+  (globalThis as any).__pm100_tool_udp_ipc_registered = true;
+
+  const events: UdpScanEvents = {
+    log: (line) => {
+      const win = getWin();
+      if (!win || win.isDestroyed()) return;
+      win.webContents.send("pm100:udp:log", line);
+    },
+    raw: (payload) => {
+      const win = getWin();
+      if (!win || win.isDestroyed()) return;
+      win.webContents.send("pm100:udp:raw", payload);
+    },
+    discovered: (row) => {
+      const win = getWin();
+      if (!win || win.isDestroyed()) return;
+      win.webContents.send("pm100:udp:discovered", row);
+    },
+    stopped: (payload) => {
+      const win = getWin();
+      if (!win || win.isDestroyed()) return;
+      win.webContents.send("pm100:udp:stopped", payload);
+    },
   };
 
-  ipcMain.handle(PM100_CHANNELS.tool.udp.scanStart, () => {
-    ensureScanner().start();
-    return true;
-  });
-
-  ipcMain.handle(PM100_CHANNELS.tool.udp.scanStop, () => {
-    if (scanner) {
-      scanner.stop();
-      scanner = null; // ✅ 추천
-    }
-    return true;
-  });
+  const scanner = createPM100UdpScanner(events);
 
   ipcMain.handle(
-    PM100_CHANNELS.tool.udp.reset,
-    (_evt, ip: string, mac: string) => {
+    "pm100:udp:scanStart",
+    async (_evt, opts?: UdpScanStartOptions) => {
       try {
-        ensureScanner().sendReset(ip, mac);
+        await scanner.start(opts);
         return true;
-      } catch {
+      } catch (e: any) {
+        events.log(`scanStart failed: ${String(e?.message || e)}`);
+        // 실패 시 안전하게 stop 처리 (stopped reason은 socket error/send failed 등으로도 나갈 수 있음)
+        try {
+          scanner.stop("scanStart failed");
+        } catch {}
         return false;
       }
     },
   );
 
-  ipcMain.handle(PM100_CHANNELS.tool.udp.updateConfig, (_evt, p) => {
+  ipcMain.handle("pm100:udp:scanStop", async () => {
     try {
-      // scanner에서 실제 UDP로 전송
-      ensureScanner().sendUpdateConfig(p);
+      scanner.stop("manual stop");
       return true;
-    } catch {
+    } catch (e: any) {
+      events.log(`scanStop failed: ${String(e?.message || e)}`);
       return false;
     }
   });
