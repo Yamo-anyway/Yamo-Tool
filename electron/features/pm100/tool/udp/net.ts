@@ -399,9 +399,9 @@ export function createPM100UdpScanner(events: UdpScanEvents) {
 
     const targets = getBroadcastTargets();
 
-    events.log(
-      `Scan start: bindPort=${bindPort}, devicePort=${PM100_PORT}, targets=${targets.join(", ")}`,
-    );
+    // events.log(
+    //   `Scan start: bindPort=${bindPort}, devicePort=${PM100_PORT}, targets=${targets.join(", ")}`,
+    // );
 
     const sendOnce = () => {
       if (!socket || !running) return;

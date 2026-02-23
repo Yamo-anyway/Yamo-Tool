@@ -377,6 +377,9 @@ const SetDeviceDialog = ({ device, open, onClose }: SetDeviceDialogProps) => {
     console.log(device);
   }, [device]);
 
+  const handleCommandInit = () => {};
+  const handleCommandSetConfig = () => {};
+
   return (
     <Dialog
       onClose={() => {}}
@@ -409,8 +412,12 @@ const SetDeviceDialog = ({ device, open, onClose }: SetDeviceDialogProps) => {
             장치 설정
           </div>
           <div>
-            <StyledDialogButton onClick={onClose}>초기화</StyledDialogButton>
-            <StyledDialogButton onClick={onClose}>업데이트</StyledDialogButton>
+            <StyledDialogButton onClick={handleCommandInit}>
+              초기화
+            </StyledDialogButton>
+            <StyledDialogButton onClick={handleCommandSetConfig}>
+              업데이트
+            </StyledDialogButton>
             <StyledDialogButton onClick={onClose}>닫기</StyledDialogButton>
           </div>
         </div>
