@@ -14,7 +14,9 @@ import { StyledPage } from "../components/StyledLayout";
 import { StyledButton } from "../components/StyledButton";
 
 export type DeviceRow = {
+  key: string;
   type: "UDP" | "TCP";
+  isDetail: boolean;
   macStr: string;
   deviceIpStr: string;
   serverIpStr: string;
@@ -190,7 +192,7 @@ export default function PM100Tool() {
           style={{
             display: "flex",
             marginBottom: "20px",
-            height: "300px",
+            height: "430px",
             border: "1px solid #FFF",
           }}
         >
@@ -248,6 +250,13 @@ export default function PM100Tool() {
                   >
                     S3
                   </StyledTableHeadCell>
+                  <StyledTableHeadCell
+                    sx={{ width: 80, minWidth: 80, maxWidth: 80 }}
+                  />
+                  <StyledTableHeadCell
+                    sx={{ width: 80, minWidth: 80, maxWidth: 80 }}
+                  />
+
                   <StyledTableHeadCell sx={{ width: "auto" }} />
                   {/* <StyledTableHeaerCell sx={{ maxWidth: "100%" }} /> */}
                 </TableRow>
@@ -255,21 +264,35 @@ export default function PM100Tool() {
 
               <TableBody>
                 {devices?.map((row: any, index: number) => {
-                  console.log("row => ", row);
                   return (
-                    <TableRow key={`device list - ${index}`}>
-                      <StyledTableCell>{row.type}</StyledTableCell>
-                      <StyledTableCell>{row.macStr}</StyledTableCell>
-                      <StyledTableCell>{row.serverIpStr}</StyledTableCell>
-                      <StyledTableCell>{row.serverPort}</StyledTableCell>
-                      <StyledTableCell>{row.deviceIpStr}</StyledTableCell>
-                      <StyledTableCell>{row.subnetStr}</StyledTableCell>
-                      <StyledTableCell>{row.gatewayStr}</StyledTableCell>
-                      <StyledTableCell />
-                      <StyledTableCell />
-                      <StyledTableCell />
-                      <StyledTableCell />
-                    </TableRow>
+                    <React.Fragment key={`device list - ${index}`}>
+                      <TableRow
+                        onClick={() => {
+                          setSelectedRow(row);
+                        }}
+                      >
+                        <StyledTableCell>{row.type}</StyledTableCell>
+                        <StyledTableCell>{row.macStr}</StyledTableCell>
+                        <StyledTableCell>{row.serverIpStr}</StyledTableCell>
+                        <StyledTableCell>{row.serverPort}</StyledTableCell>
+                        <StyledTableCell>{row.deviceIpStr}</StyledTableCell>
+                        <StyledTableCell>{row.subnetStr}</StyledTableCell>
+                        <StyledTableCell>{row.gatewayStr}</StyledTableCell>
+                        <StyledTableCell />
+                        <StyledTableCell />
+                        <StyledTableCell />
+                        <StyledTableCell>초기화</StyledTableCell>
+                        <StyledTableCell>수정</StyledTableCell>
+                        <StyledTableCell />
+                      </TableRow>
+                      {row?.isDetail && (
+                        <TableRow>
+                          <TableCell colSpan={100}>
+                            <Box> 상세</Box>
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </React.Fragment>
                   );
                 })}
               </TableBody>
@@ -277,9 +300,9 @@ export default function PM100Tool() {
           </TableContainer>
         </div>
 
-        <div style={{ display: "flex", height: "330px" }}>
+        <div style={{ display: "flex", height: "200px" }}>
           <div
-            style={{ width: "50%", height: "100%", border: "1px solid #FFF" }}
+            style={{ width: "100%", height: "100%", border: "1px solid #FFF" }}
           >
             <textarea
               ref={logRef}
@@ -289,11 +312,6 @@ export default function PM100Tool() {
               placeholder="Logs..."
               style={{ height: "100%" }}
             />
-          </div>
-          <div
-            style={{ width: "50%", height: "100%", border: "1px solid #FFF" }}
-          >
-            설정
           </div>
         </div>
       </div>

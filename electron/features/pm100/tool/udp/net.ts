@@ -36,11 +36,11 @@ function xorChecksum(buf: Buffer): number {
   return x & 0xff;
 }
 
-function toHex(bytes: Uint8Array | Buffer) {
-  return Array.from(bytes)
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join(" ");
-}
+// function toHex(bytes: Uint8Array | Buffer) {
+//   return Array.from(bytes)
+//     .map((b) => b.toString(16).padStart(2, "0"))
+//     .join(" ");
+// }
 
 export function buildDiscoveryPacket(): Buffer {
   const body = Buffer.from([
@@ -130,7 +130,9 @@ export function parsePM100Response(msg: Buffer): PM100DeviceInfo | null {
 
 function toDeviceRow(info: PM100DeviceInfo, rawBytes: Uint8Array): DeviceRow {
   return {
+    key: "sss",
     type: "UDP", // ✅ 여기 추가
+    isDetail: false,
     macStr: info.mac,
     deviceIpStr: info.ip,
     serverIpStr: info.serverIp,
@@ -176,7 +178,7 @@ export function createPM100UdpScanner(events: UdpScanEvents) {
       socket = null;
     }
 
-    if (reason) events.log(`udp scan stopped: ${reason}`);
+    if (reason) events.log(`UDP 검색 멈춤: ${reason}`);
 
     // ✅ restart는 UI 토글 깨질 수 있으니 stopped 이벤트 안 보냄
     if (reason !== "restart") {
@@ -213,7 +215,7 @@ export function createPM100UdpScanner(events: UdpScanEvents) {
       if (!running) return;
 
       // ✅ UDP RX 로그
-      events.log(`UDP RX: ${rinfo.address}:${rinfo.port}  ${toHex(msg)}`);
+      // events.log(`UDP RX: ${rinfo.address}:${rinfo.port}  ${toHex(msg)}`);
 
       // raw 이벤트
       events.raw({
@@ -272,16 +274,17 @@ export function createPM100UdpScanner(events: UdpScanEvents) {
       const packet = buildDiscoveryPacket();
 
       // ✅ TX 로그(전체 패킷)
-      events.log(`UDP TX: ${toHex(packet)}`);
+      // events.log(`UDP TX: ${toHex(packet)}`);
 
       // 여러 target으로 브로드캐스트
       for (const host of targets) {
         socket.send(packet, PM100_PORT, host, (err) => {
           if (err) {
             events.log(`Send fail -> ${host}:${PM100_PORT} : ${err.message}`);
-          } else {
-            events.log(`Sent -> ${host}:${PM100_PORT}`);
           }
+          // else {
+          //   events.log(`Sent -> ${host}:${PM100_PORT}`);
+          // }
         });
       }
     };
@@ -298,7 +301,7 @@ export function createPM100UdpScanner(events: UdpScanEvents) {
         return;
       }
 
-      events.log(`Resend (${count}/${countMax})`);
+      // events.log(`Resend (${count}/${countMax})`);
       sendOnce();
     }, intervalMs);
   }

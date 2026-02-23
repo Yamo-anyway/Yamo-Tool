@@ -605,9 +605,6 @@ function xorChecksum(buf) {
   for (const b of buf) x ^= b;
   return x & 255;
 }
-function toHex(bytes) {
-  return Array.from(bytes).map((b) => b.toString(16).padStart(2, "0")).join(" ");
-}
 function buildDiscoveryPacket() {
   const body = Buffer.from([
     67,
@@ -680,8 +677,10 @@ function parsePM100Response(msg) {
 }
 function toDeviceRow(info, rawBytes) {
   return {
+    key: "sss",
     type: "UDP",
     // ✅ 여기 추가
+    isDetail: false,
     macStr: info.mac,
     deviceIpStr: info.ip,
     serverIpStr: info.serverIp,
@@ -718,7 +717,7 @@ function createPM100UdpScanner(events) {
       }
       socket = null;
     }
-    if (reason) events.log(`udp scan stopped: ${reason}`);
+    if (reason) events.log(`UDP 검색 멈춤: ${reason}`);
     if (reason !== "restart") {
       events.stopped({ reason: reason ?? "", found: deviceMap.size });
     }
@@ -741,7 +740,6 @@ function createPM100UdpScanner(events) {
     });
     socket.on("message", (msg, rinfo) => {
       if (!running) return;
-      events.log(`UDP RX: ${rinfo.address}:${rinfo.port}  ${toHex(msg)}`);
       events.raw({
         from: {
           address: rinfo.address,
@@ -781,13 +779,10 @@ function createPM100UdpScanner(events) {
     const sendOnce = () => {
       if (!socket || !running) return;
       const packet = buildDiscoveryPacket();
-      events.log(`UDP TX: ${toHex(packet)}`);
       for (const host of targets) {
         socket.send(packet, PM100_PORT, host, (err) => {
           if (err) {
             events.log(`Send fail -> ${host}:${PM100_PORT} : ${err.message}`);
-          } else {
-            events.log(`Sent -> ${host}:${PM100_PORT}`);
           }
         });
       }
@@ -800,7 +795,6 @@ function createPM100UdpScanner(events) {
         cleanup("completed");
         return;
       }
-      events.log(`Resend (${count}/${countMax})`);
       sendOnce();
     }, intervalMs);
   }
