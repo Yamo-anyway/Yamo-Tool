@@ -2,24 +2,58 @@ import os from "os";
 import dgram from "dgram";
 import { DeviceRow } from "../../../../../src/PM100Tool/PM100Tool";
 
-export const PM100_PORT = 1500; // ✅ 장치 수신 포트
-export const SEARCH_MASK = "255.255.255.0"; // ✅ 기존처럼 마스크 기반 브로드캐스트 계산
+export const PM100_PORT = 1500; // ✅ 장치 수신(목표) 포트
 
+/**
+ * ✅ 응답 구조(실데이터 검증 완료)
+ * tag(6) = "CG_RES"
+ * mac(6)
+ * block(27) =
+ *   cmd(1)
+ *   version(2)
+ *   deviceIp(4)
+ *   subnetMask(4)
+ *   gateway(4)
+ *   serverIp(4)
+ *   serverPort(2)        // ✅ UInt16BE
+ *   ncno(3)              // s1,s2,s3 mode
+ *   delayTime(3)         // s1,s2,s3 delay
+ * xorBlock(1) = XOR(block 27 bytes)
+ * xorAll(1)   = XOR( tag+mac+block+xorBlock )  (즉, 마지막 1바이트 직전까지 전부 XOR)
+ *
+ * 총 길이 = 6+6+27+1+1 = 41 bytes
+ */
 export type PM100DeviceInfo = {
   mac: string;
+  cmd: number;
+  version: string;
+
   ip: string;
-  serverIp: string;
   subnetMask: string;
   gateway: string;
-  serverPort: number;
-  version: string;
+  serverIp: string;
+  serverPort: number; // uint16
+
+  s1Mode: number;
+  s2Mode: number;
+  s3Mode: number;
+
+  s1DelayTime: number;
+  s2DelayTime: number;
+  s3DelayTime: number;
+
+  // 검증/디버깅용
+  receivedXorBlock: number;
+  receivedXorAll: number;
+  calcXorBlock: number;
+  calcXorAll: number;
 };
 
 export type UdpScanStartOptions = {
-  port?: number; // ✅ 장치 포트(기본 1500) - 여기선 PM100_PORT로 고정 사용해도 됨
+  /** ✅ 우리(PC) 수신(bind) 포트. 기본: 1500 */
+  port?: number;
   intervalMs?: number; // default 2000
   count?: number; // default 5
-  mask?: string; // ✅ SEARCH_MASK 대체 가능
 };
 
 export type UdpScanEvents = {
@@ -35,12 +69,6 @@ function xorChecksum(buf: Buffer): number {
   for (const b of buf) x ^= b;
   return x & 0xff;
 }
-
-// function toHex(bytes: Uint8Array | Buffer) {
-//   return Array.from(bytes)
-//     .map((b) => b.toString(16).padStart(2, "0"))
-//     .join(" ");
-// }
 
 export function buildDiscoveryPacket(): Buffer {
   const body = Buffer.from([
@@ -81,8 +109,7 @@ function broadcastByMask(ip: string, mask: string) {
   return u32ToIp(bcast);
 }
 
-// ✅ 브로드캐스트 타겟은 NIC별로 계산 (기존 “잘 되는 코드” 방식)
-function getBroadcastTargets(mask: string) {
+function getBroadcastTargets() {
   const nets = os.networkInterfaces();
   const targets = new Set<string>();
 
@@ -91,6 +118,10 @@ function getBroadcastTargets(mask: string) {
       const isV4 = a.family === "IPv4" || (a as any).family === 4;
       if (!isV4) continue;
       if (a.internal) continue;
+
+      const mask = (a as any).netmask;
+      if (!mask) continue;
+
       targets.add(broadcastByMask(a.address, mask));
     }
   }
@@ -111,51 +142,144 @@ function formatIp(msg: Buffer, offset: number) {
 }
 
 export function parsePM100Response(msg: Buffer): PM100DeviceInfo | null {
-  if (msg.length < 46) return null;
+  // 총 길이 = 41
+  if (msg.length < 41) return null;
 
   const tag = msg.slice(0, 6).toString("ascii");
   if (tag !== "CG_RES") return null;
 
-  const mac = formatMac(msg, 6);
-  const version = `${msg[13]}.${msg[14]}`;
+  let o = 6;
 
-  const ip = formatIp(msg, 15);
-  const serverIp = formatIp(msg, 19);
-  const subnetMask = formatIp(msg, 27);
-  const gateway = formatIp(msg, 31);
-  const serverPort = msg.readUInt16BE(35);
+  const mac = formatMac(msg, o);
+  o += 6;
 
-  return { mac, ip, serverIp, subnetMask, gateway, serverPort, version };
+  const blockOffset = o;
+  const blockLen = 27;
+
+  // block(27) 파싱
+  const cmd = msg[o];
+  o += 1;
+
+  const verMajor = msg[o];
+  const verMinor = msg[o + 1];
+  const version = `${verMajor}.${verMinor}`;
+  o += 2;
+
+  const ip = formatIp(msg, o);
+  o += 4;
+
+  const subnetMask = formatIp(msg, o);
+  o += 4;
+
+  const gateway = formatIp(msg, o);
+  o += 4;
+
+  const serverIp = formatIp(msg, o);
+  o += 4;
+
+  // ✅ serverPort = 2 bytes (실데이터 기준)
+  const serverPort = msg.readUInt16BE(o);
+  o += 2;
+
+  // ncno(3) = s1,s2,s3 mode
+  const s1Mode = msg[o];
+  const s2Mode = msg[o + 1];
+  const s3Mode = msg[o + 2];
+  o += 3;
+
+  // delayTime(3) = s1,s2,s3 delay
+  const s1DelayTime = msg[o];
+  const s2DelayTime = msg[o + 1];
+  const s3DelayTime = msg[o + 2];
+  o += 3;
+
+  // xorBlock(1), xorAll(1)
+  const receivedXorBlock = msg[o];
+  const receivedXorAll = msg[o + 1];
+
+  // ✅ 계산
+  const block = msg.slice(blockOffset, blockOffset + blockLen); // cmd..delay 까지 27 bytes
+  const calcXorBlock = xorChecksum(block);
+
+  // xorAll = 마지막 바이트(xorAll) 제외한 전체 XOR
+  const calcXorAll = xorChecksum(msg.slice(0, msg.length - 1));
+
+  // ✅ 검증 (틀리면 버림)
+  if (receivedXorBlock !== calcXorBlock) return null;
+  if (receivedXorAll !== calcXorAll) return null;
+
+  return {
+    mac,
+    cmd,
+    version,
+
+    ip,
+    subnetMask,
+    gateway,
+    serverIp,
+    serverPort,
+
+    s1Mode,
+    s2Mode,
+    s3Mode,
+
+    s1DelayTime,
+    s2DelayTime,
+    s3DelayTime,
+
+    receivedXorBlock,
+    receivedXorAll,
+    calcXorBlock,
+    calcXorAll,
+  };
 }
 
-function getRandomSixDigit() {
-  return Math.floor(Math.random() * 900000) + 100000;
+// ✅ UI 안정성: MAC 기반 key 고정
+function keyFromMac(mac: string) {
+  return (
+    (mac
+      .replace(/[^0-9A-F]/gi, "")
+      .slice(-6)
+      .split("")
+      .reduce((acc, ch) => (acc * 16 + parseInt(ch, 16)) >>> 0, 0) %
+      900000) +
+    100000
+  );
 }
 
 function toDeviceRow(info: PM100DeviceInfo, rawBytes: Uint8Array): DeviceRow {
   return {
-    key: getRandomSixDigit(),
-    type: "UDP", // ✅ 여기 추가
+    key: keyFromMac(info.mac),
+    type: "UDP",
     isDetail: false,
     isEdit: false,
+
     macStr: info.mac,
     deviceIpStr: info.ip,
-    serverIpStr: info.serverIp,
     subnetStr: info.subnetMask,
     gatewayStr: info.gateway,
+    serverIpStr: info.serverIp,
     serverPort: info.serverPort,
-    s1Mode: 0,
-    s1DelayTime: 5,
+
+    s1Mode: info.s1Mode,
+    s2Mode: info.s2Mode,
+    s3Mode: info.s3Mode,
+
+    s1DelayTime: info.s1DelayTime,
+    s2DelayTime: info.s2DelayTime,
+    s3DelayTime: info.s3DelayTime,
+
+    // 응답 구조에 status 없으면 0 유지
     s1Status: 0,
-    s2Mode: 0,
-    s2DelayTime: 5,
     s2Status: 0,
-    s3Mode: 0,
-    s3DelayTime: 5,
     s3Status: 0,
+
     raw: {
       rawBytes,
+      cmd: info.cmd,
       version: info.version,
+      xorBlock: info.receivedXorBlock,
+      xorAll: info.receivedXorAll,
     },
   };
 }
@@ -166,14 +290,12 @@ export function createPM100UdpScanner(events: UdpScanEvents) {
   let timer: NodeJS.Timeout | null = null;
   let running = false;
 
-  // ✅ mac 중복 제거 저장소 (스캔 1회 동안 유지)
   const deviceMap = new Map<string, DeviceRow>();
 
   const defaults = {
     port: PM100_PORT,
     intervalMs: 2000,
     count: 5,
-    mask: SEARCH_MASK,
   };
 
   function cleanup(reason?: string) {
@@ -194,7 +316,6 @@ export function createPM100UdpScanner(events: UdpScanEvents) {
 
     if (reason) events.log(`UDP 검색 멈춤: ${reason}`);
 
-    // ✅ restart는 UI 토글 깨질 수 있으니 stopped 이벤트 안 보냄
     if (reason !== "restart") {
       events.stopped({ reason: reason ?? "", found: deviceMap.size });
     }
@@ -210,14 +331,11 @@ export function createPM100UdpScanner(events: UdpScanEvents) {
 
     const intervalMs = Number(opts?.intervalMs ?? defaults.intervalMs);
     const countMax = Number(opts?.count ?? defaults.count);
-    const mask = String(opts?.mask ?? defaults.mask);
+    const bindPort = Number(opts?.port ?? defaults.port);
 
-    // 내부 정리(렌더러 UI 건드리면 안 됨)
     cleanup("restart");
-
     running = true;
 
-    // ✅ 기존 “잘 되는 코드”처럼 reuseAddr 사용 + 1500 bind
     socket = dgram.createSocket({ type: "udp4", reuseAddr: true });
 
     socket.on("error", (err) => {
@@ -228,10 +346,6 @@ export function createPM100UdpScanner(events: UdpScanEvents) {
     socket.on("message", (msg, rinfo) => {
       if (!running) return;
 
-      // ✅ UDP RX 로그
-      // events.log(`UDP RX: ${rinfo.address}:${rinfo.port}  ${toHex(msg)}`);
-
-      // raw 이벤트
       events.raw({
         from: {
           address: rinfo.address,
@@ -247,25 +361,31 @@ export function createPM100UdpScanner(events: UdpScanEvents) {
 
       const row = toDeviceRow(info, new Uint8Array(msg));
 
-      // ✅ mac 중복 제거 저장 + 갱신/추가
       const prev = deviceMap.get(row.macStr);
       deviceMap.set(row.macStr, row);
 
-      // ✅ 변동 있을 때만 discovered 쏘기(원하면 단순히 매번 보내도 OK)
+      // ✅ 변동 감지(새 필드 반영)
       if (
         !prev ||
         prev.deviceIpStr !== row.deviceIpStr ||
+        prev.subnetStr !== row.subnetStr ||
+        prev.gatewayStr !== row.gatewayStr ||
         prev.serverIpStr !== row.serverIpStr ||
-        prev.serverPort !== row.serverPort
+        prev.serverPort !== row.serverPort ||
+        prev.s1Mode !== row.s1Mode ||
+        prev.s2Mode !== row.s2Mode ||
+        prev.s3Mode !== row.s3Mode ||
+        prev.s1DelayTime !== row.s1DelayTime ||
+        prev.s2DelayTime !== row.s2DelayTime ||
+        prev.s3DelayTime !== row.s3DelayTime
       ) {
         events.discovered(row);
       }
     });
 
-    // ✅ PM100_PORT(1500)로 bind (너 “잘 되는 코드”와 동일)
     await new Promise<void>((resolve, reject) => {
       try {
-        socket!.bind(PM100_PORT, () => {
+        socket!.bind(bindPort, () => {
           try {
             socket!.setBroadcast(true);
             socket!.setRecvBufferSize(1024 * 1024);
@@ -277,9 +397,10 @@ export function createPM100UdpScanner(events: UdpScanEvents) {
       }
     });
 
-    const targets = getBroadcastTargets(mask);
+    const targets = getBroadcastTargets();
+
     events.log(
-      `Scan start: port=${PM100_PORT}, mask=${mask}, targets=${targets.join(", ")}`,
+      `Scan start: bindPort=${bindPort}, devicePort=${PM100_PORT}, targets=${targets.join(", ")}`,
     );
 
     const sendOnce = () => {
@@ -287,23 +408,15 @@ export function createPM100UdpScanner(events: UdpScanEvents) {
 
       const packet = buildDiscoveryPacket();
 
-      // ✅ TX 로그(전체 패킷)
-      // events.log(`UDP TX: ${toHex(packet)}`);
-
-      // 여러 target으로 브로드캐스트
       for (const host of targets) {
         socket.send(packet, PM100_PORT, host, (err) => {
           if (err) {
             events.log(`Send fail -> ${host}:${PM100_PORT} : ${err.message}`);
           }
-          // else {
-          //   events.log(`Sent -> ${host}:${PM100_PORT}`);
-          // }
         });
       }
     };
 
-    // ✅ 즉시 1회 + 2초 간격 총 countMax회
     let count = 1;
     sendOnce();
 
@@ -315,7 +428,6 @@ export function createPM100UdpScanner(events: UdpScanEvents) {
         return;
       }
 
-      // events.log(`Resend (${count}/${countMax})`);
       sendOnce();
     }, intervalMs);
   }

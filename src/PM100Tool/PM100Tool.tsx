@@ -310,9 +310,15 @@ export default function PM100Tool() {
                       <StyledTableCell>{row.deviceIpStr}</StyledTableCell>
                       <StyledTableCell>{row.subnetStr}</StyledTableCell>
                       <StyledTableCell>{row.gatewayStr}</StyledTableCell>
-                      <StyledTableCell />
-                      <StyledTableCell />
-                      <StyledTableCell />
+                      <StyledTableCell>
+                        {`${row.s1Mode === 0 ? "NC" : "NO"} (${row.s1DelayTime}s)`}
+                      </StyledTableCell>
+                      <StyledTableCell>
+                        {`${row.s2Mode === 0 ? "NC" : "NO"} (${row.s2DelayTime}s)`}
+                      </StyledTableCell>
+                      <StyledTableCell>
+                        {`${row.s3Mode === 0 ? "NC" : "NO"} (${row.s3DelayTime}s)`}
+                      </StyledTableCell>
                       <StyledTableCell
                         onClick={() => {
                           setIsOpenEdit(true);
@@ -380,7 +386,7 @@ const SetDeviceDialog = ({ device, open, onClose }: SetDeviceDialogProps) => {
         paper: {
           sx: {
             width: 900,
-            height: 350,
+            height: 290,
             maxWidth: "none",
             overflowX: "hidden",
           },
@@ -426,9 +432,43 @@ const SetDeviceDialog = ({ device, open, onClose }: SetDeviceDialogProps) => {
                 Server IP
               </div>
               <div style={{ marginRight: "20px" }}>
-                <StyledInputIp value={editDevice?.serverIpStr} />
-              </div>
+                <StyledInputIp
+                  type="text"
+                  inputMode="decimal"
+                  placeholder="0.0.0.0"
+                  value={editDevice?.serverIpStr ?? ""}
+                  onChange={(e) => {
+                    // 1) 숫자/점만 허용
+                    // 2) 연속 점/길이 과도 방지
+                    let v = e.target.value.replace(/[^0-9.]/g, "");
+                    v = v.replace(/\.{2,}/g, "."); // ".." -> "."
+                    if (v.length > 15) v = v.slice(0, 15); // 255.255.255.255 최대 15자
 
+                    setEditDevice((prev) =>
+                      prev ? { ...prev, serverIpStr: v } : prev,
+                    );
+                  }}
+                  onBlur={() => {
+                    const ip = (editDevice?.serverIpStr ?? "").trim();
+
+                    const isValid =
+                      /^(\d{1,3}\.){3}\d{1,3}$/.test(ip) &&
+                      ip.split(".").every((x) => {
+                        const n = Number(x);
+                        return (
+                          x !== "" && n >= 0 && n <= 255 && String(n) === x
+                        ); // "01" 같은 거 싫으면 이 조건 유지
+                      });
+
+                    if (!isValid) {
+                      // 유효하지 않으면 빈 값으로(가장 단순하고 안전)
+                      setEditDevice((prev) =>
+                        prev ? { ...prev, serverIpStr: "" } : prev,
+                      );
+                    }
+                  }}
+                />
+              </div>
               <div
                 style={{
                   marginRight: "20px",
@@ -438,7 +478,29 @@ const SetDeviceDialog = ({ device, open, onClose }: SetDeviceDialogProps) => {
                 Port
               </div>
               <div style={{ marginRight: "20px" }}>
-                <StyledInputIp value={editDevice?.serverPort} />
+                <StyledInputPort
+                  type="text"
+                  inputMode="numeric"
+                  value={editDevice?.serverPort ?? ""}
+                  onChange={(e) => {
+                    const onlyDigits = e.target.value.replace(/\D/g, "");
+
+                    if (!onlyDigits) {
+                      setEditDevice((prev) =>
+                        prev ? { ...prev, serverPort: 0 } : prev,
+                      );
+                      return;
+                    }
+
+                    const num = Number(onlyDigits);
+
+                    if (num >= 1 && num <= 65535) {
+                      setEditDevice((prev) =>
+                        prev ? { ...prev, serverPort: num } : prev,
+                      );
+                    }
+                  }}
+                />
               </div>
             </div>
             <div style={{ display: "flex" }}>
@@ -458,7 +520,42 @@ const SetDeviceDialog = ({ device, open, onClose }: SetDeviceDialogProps) => {
                   Device IP
                 </div>
                 <div style={{ marginRight: "20px" }}>
-                  <StyledInputIp value={editDevice?.deviceIpStr} />
+                  <StyledInputIp
+                    type="text"
+                    inputMode="decimal"
+                    placeholder="0.0.0.0"
+                    value={editDevice?.deviceIpStr ?? ""}
+                    onChange={(e) => {
+                      // 1) 숫자/점만 허용
+                      // 2) 연속 점/길이 과도 방지
+                      let v = e.target.value.replace(/[^0-9.]/g, "");
+                      v = v.replace(/\.{2,}/g, "."); // ".." -> "."
+                      if (v.length > 15) v = v.slice(0, 15); // 255.255.255.255 최대 15자
+
+                      setEditDevice((prev) =>
+                        prev ? { ...prev, deviceIpStr: v } : prev,
+                      );
+                    }}
+                    onBlur={() => {
+                      const ip = (editDevice?.deviceIpStr ?? "").trim();
+
+                      const isValid =
+                        /^(\d{1,3}\.){3}\d{1,3}$/.test(ip) &&
+                        ip.split(".").every((x) => {
+                          const n = Number(x);
+                          return (
+                            x !== "" && n >= 0 && n <= 255 && String(n) === x
+                          ); // "01" 같은 거 싫으면 이 조건 유지
+                        });
+
+                      if (!isValid) {
+                        // 유효하지 않으면 빈 값으로(가장 단순하고 안전)
+                        setEditDevice((prev) =>
+                          prev ? { ...prev, deviceIpStr: "" } : prev,
+                        );
+                      }
+                    }}
+                  />
                 </div>
                 <div
                   style={{
@@ -469,7 +566,42 @@ const SetDeviceDialog = ({ device, open, onClose }: SetDeviceDialogProps) => {
                   Subnet Mask
                 </div>
                 <div style={{ marginRight: "20px" }}>
-                  <StyledInputIp value={editDevice?.subnetStr} />
+                  <StyledInputIp
+                    type="text"
+                    inputMode="decimal"
+                    placeholder="255.255.255.0"
+                    value={editDevice?.subnetStr ?? ""}
+                    onChange={(e) => {
+                      // 1) 숫자/점만 허용
+                      // 2) 연속 점/길이 과도 방지
+                      let v = e.target.value.replace(/[^0-9.]/g, "");
+                      v = v.replace(/\.{2,}/g, "."); // ".." -> "."
+                      if (v.length > 15) v = v.slice(0, 15); // 255.255.255.255 최대 15자
+
+                      setEditDevice((prev) =>
+                        prev ? { ...prev, subnetStr: v } : prev,
+                      );
+                    }}
+                    onBlur={() => {
+                      const ip = (editDevice?.subnetStr ?? "").trim();
+
+                      const isValid =
+                        /^(\d{1,3}\.){3}\d{1,3}$/.test(ip) &&
+                        ip.split(".").every((x) => {
+                          const n = Number(x);
+                          return (
+                            x !== "" && n >= 0 && n <= 255 && String(n) === x
+                          ); // "01" 같은 거 싫으면 이 조건 유지
+                        });
+
+                      if (!isValid) {
+                        // 유효하지 않으면 빈 값으로(가장 단순하고 안전)
+                        setEditDevice((prev) =>
+                          prev ? { ...prev, subnetStr: "" } : prev,
+                        );
+                      }
+                    }}
+                  />
                 </div>
                 <div
                   style={{
@@ -480,7 +612,42 @@ const SetDeviceDialog = ({ device, open, onClose }: SetDeviceDialogProps) => {
                   Gateway
                 </div>
                 <div style={{ marginRight: "20px" }}>
-                  <StyledInputIp value={editDevice?.gatewayStr} />
+                  <StyledInputIp
+                    type="text"
+                    inputMode="decimal"
+                    placeholder="0.0.0.0"
+                    value={editDevice?.gatewayStr ?? ""}
+                    onChange={(e) => {
+                      // 1) 숫자/점만 허용
+                      // 2) 연속 점/길이 과도 방지
+                      let v = e.target.value.replace(/[^0-9.]/g, "");
+                      v = v.replace(/\.{2,}/g, "."); // ".." -> "."
+                      if (v.length > 15) v = v.slice(0, 15); // 255.255.255.255 최대 15자
+
+                      setEditDevice((prev) =>
+                        prev ? { ...prev, gatewayStr: v } : prev,
+                      );
+                    }}
+                    onBlur={() => {
+                      const ip = (editDevice?.gatewayStr ?? "").trim();
+
+                      const isValid =
+                        /^(\d{1,3}\.){3}\d{1,3}$/.test(ip) &&
+                        ip.split(".").every((x) => {
+                          const n = Number(x);
+                          return (
+                            x !== "" && n >= 0 && n <= 255 && String(n) === x
+                          ); // "01" 같은 거 싫으면 이 조건 유지
+                        });
+
+                      if (!isValid) {
+                        // 유효하지 않으면 빈 값으로(가장 단순하고 안전)
+                        setEditDevice((prev) =>
+                          prev ? { ...prev, gatewayStr: "" } : prev,
+                        );
+                      }
+                    }}
+                  />
                 </div>
               </div>
             </div>
@@ -488,7 +655,6 @@ const SetDeviceDialog = ({ device, open, onClose }: SetDeviceDialogProps) => {
               style={{
                 display: "flex",
                 alignItems: "center",
-                marginBottom: "10px",
               }}
             >
               <div style={{ marginRight: "20px" }}>Sensor #1</div>
@@ -518,13 +684,12 @@ const SetDeviceDialog = ({ device, open, onClose }: SetDeviceDialogProps) => {
               <div style={{ marginRight: "5px" }}>
                 <StyledInputDelayTime value={editDevice?.s1DelayTime} />
               </div>
-              <div style={{ marginRight: "20px" }}>ms</div>
+              <div style={{ marginRight: "20px" }}> s</div>
             </div>
             <div
               style={{
                 display: "flex",
                 alignItems: "center",
-                marginBottom: "10px",
               }}
             >
               <div style={{ marginRight: "20px" }}> Sensor #2</div>
@@ -554,13 +719,12 @@ const SetDeviceDialog = ({ device, open, onClose }: SetDeviceDialogProps) => {
               <div style={{ marginRight: "5px" }}>
                 <StyledInputDelayTime value={editDevice?.s2DelayTime} />
               </div>
-              <div style={{ marginRight: "20px" }}>ms</div>
+              <div style={{ marginRight: "20px" }}> s</div>
             </div>
             <div
               style={{
                 display: "flex",
                 alignItems: "center",
-                marginBottom: "10px",
               }}
             >
               <div style={{ marginRight: "20px" }}> Sensor #3</div>
@@ -590,7 +754,7 @@ const SetDeviceDialog = ({ device, open, onClose }: SetDeviceDialogProps) => {
               <div style={{ marginRight: "5px" }}>
                 <StyledInputDelayTime value={editDevice?.s3DelayTime} />
               </div>
-              <div style={{ marginRight: "20px" }}>ms</div>
+              <div style={{ marginRight: "20px" }}> s</div>
             </div>
           </div>
         </div>
@@ -628,6 +792,20 @@ const StyledTableCell = styled(TableCell)`
 `;
 
 const StyledInputIp = styled.input`
+  color: black;
+  background: transparent;
+  text-align: center;
+  font-size: 0.9rem;
+  margin: 0;
+  padding: 0 6px;
+  height: 30px;
+  width: 150px;
+  line-height: 30px;
+  border: 1px solid rgba(145, 158, 171, 0.32);
+  box-sizing: border-box;
+`;
+
+const StyledInputPort = styled.input`
   color: black;
   background: transparent;
 
@@ -671,7 +849,7 @@ const StyledDialogButton = styled(Button)`
 `;
 
 const StyledInputDelayTime = styled.input`
-  color: white;
+  color: black;
   background: transparent;
 
   text-align: center;

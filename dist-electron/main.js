@@ -52,7 +52,7 @@ const PM100_CHANNELS = {
   }
 };
 const PM100_PORT$1 = 1500;
-const SEARCH_MASK$1 = "255.255.255.0";
+const SEARCH_MASK = "255.255.255.0";
 function xorChecksum$2(buf) {
   let x = 0;
   for (const b of buf) x ^= b;
@@ -167,9 +167,9 @@ class PM100Scanner {
       const packet = buildDiscoveryPacket$1();
       socket.setBroadcast(true);
       socket.setRecvBufferSize(1024 * 1024);
-      const targets = getBroadcastTargets$1(SEARCH_MASK$1);
+      const targets = getBroadcastTargets$1(SEARCH_MASK);
       this.onLog(
-        `Scan start: port=${PM100_PORT$1}, mask=${SEARCH_MASK$1}, targets=${targets.join(", ")}`
+        `Scan start: port=${PM100_PORT$1}, mask=${SEARCH_MASK}, targets=${targets.join(", ")}`
       );
       this.onLog(
         `Send ${packet.length} bytes: ${packet.toString("hex").match(/.{1,2}/g)?.join(" ")}`
@@ -220,7 +220,7 @@ class PM100Scanner {
   sendReset(deviceIp, mac) {
     const socket = this.ensureCmdSocket();
     const packet = buildResetPacket(mac);
-    const bcast = broadcastByMask$1(deviceIp, SEARCH_MASK$1);
+    const bcast = broadcastByMask$1(deviceIp, SEARCH_MASK);
     this.onLog(
       `Reset TX (broadcast) -> ${bcast}:${PM100_PORT$1} (${packet.length} bytes)`
     );
@@ -599,7 +599,6 @@ async function stopPM100SetupServer() {
   }
 }
 const PM100_PORT = 1500;
-const SEARCH_MASK = "255.255.255.0";
 function xorChecksum(buf) {
   let x = 0;
   for (const b of buf) x ^= b;
@@ -642,7 +641,7 @@ function broadcastByMask(ip2, mask) {
   const bcast = (ipU | ~maskU >>> 0) >>> 0;
   return u32ToIp(bcast);
 }
-function getBroadcastTargets(mask) {
+function getBroadcastTargets() {
   const nets = os.networkInterfaces();
   const targets = /* @__PURE__ */ new Set();
   for (const ifname of Object.keys(nets)) {
@@ -650,6 +649,8 @@ function getBroadcastTargets(mask) {
       const isV4 = a.family === "IPv4" || a.family === 4;
       if (!isV4) continue;
       if (a.internal) continue;
+      const mask = a.netmask;
+      if (!mask) continue;
       targets.add(broadcastByMask(a.address, mask));
     }
   }
@@ -663,46 +664,97 @@ function formatIp(msg, offset) {
   return `${msg[offset]}.${msg[offset + 1]}.${msg[offset + 2]}.${msg[offset + 3]}`;
 }
 function parsePM100Response(msg) {
-  if (msg.length < 46) return null;
+  if (msg.length < 41) return null;
   const tag = msg.slice(0, 6).toString("ascii");
   if (tag !== "CG_RES") return null;
-  const mac = formatMac(msg, 6);
-  const version = `${msg[13]}.${msg[14]}`;
-  const ip2 = formatIp(msg, 15);
-  const serverIp = formatIp(msg, 19);
-  const subnetMask = formatIp(msg, 27);
-  const gateway = formatIp(msg, 31);
-  const serverPort = msg.readUInt16BE(35);
-  return { mac, ip: ip2, serverIp, subnetMask, gateway, serverPort, version };
+  let o = 6;
+  const mac = formatMac(msg, o);
+  o += 6;
+  const blockOffset = o;
+  const blockLen = 27;
+  const cmd = msg[o];
+  o += 1;
+  const verMajor = msg[o];
+  const verMinor = msg[o + 1];
+  const version = `${verMajor}.${verMinor}`;
+  o += 2;
+  const ip2 = formatIp(msg, o);
+  o += 4;
+  const subnetMask = formatIp(msg, o);
+  o += 4;
+  const gateway = formatIp(msg, o);
+  o += 4;
+  const serverIp = formatIp(msg, o);
+  o += 4;
+  const serverPort = msg.readUInt16BE(o);
+  o += 2;
+  const s1Mode = msg[o];
+  const s2Mode = msg[o + 1];
+  const s3Mode = msg[o + 2];
+  o += 3;
+  const s1DelayTime = msg[o];
+  const s2DelayTime = msg[o + 1];
+  const s3DelayTime = msg[o + 2];
+  o += 3;
+  const receivedXorBlock = msg[o];
+  const receivedXorAll = msg[o + 1];
+  const block = msg.slice(blockOffset, blockOffset + blockLen);
+  const calcXorBlock = xorChecksum(block);
+  const calcXorAll = xorChecksum(msg.slice(0, msg.length - 1));
+  if (receivedXorBlock !== calcXorBlock) return null;
+  if (receivedXorAll !== calcXorAll) return null;
+  return {
+    mac,
+    cmd,
+    version,
+    ip: ip2,
+    subnetMask,
+    gateway,
+    serverIp,
+    serverPort,
+    s1Mode,
+    s2Mode,
+    s3Mode,
+    s1DelayTime,
+    s2DelayTime,
+    s3DelayTime,
+    receivedXorBlock,
+    receivedXorAll,
+    calcXorBlock,
+    calcXorAll
+  };
 }
-function getRandomSixDigit() {
-  return Math.floor(Math.random() * 9e5) + 1e5;
+function keyFromMac(mac) {
+  return mac.replace(/[^0-9A-F]/gi, "").slice(-6).split("").reduce((acc, ch) => acc * 16 + parseInt(ch, 16) >>> 0, 0) % 9e5 + 1e5;
 }
 function toDeviceRow(info, rawBytes) {
   return {
-    key: getRandomSixDigit(),
+    key: keyFromMac(info.mac),
     type: "UDP",
-    // ✅ 여기 추가
     isDetail: false,
     isEdit: false,
     macStr: info.mac,
     deviceIpStr: info.ip,
-    serverIpStr: info.serverIp,
     subnetStr: info.subnetMask,
     gatewayStr: info.gateway,
+    serverIpStr: info.serverIp,
     serverPort: info.serverPort,
-    s1Mode: 0,
-    s1DelayTime: 5,
+    s1Mode: info.s1Mode,
+    s2Mode: info.s2Mode,
+    s3Mode: info.s3Mode,
+    s1DelayTime: info.s1DelayTime,
+    s2DelayTime: info.s2DelayTime,
+    s3DelayTime: info.s3DelayTime,
+    // 응답 구조에 status 없으면 0 유지
     s1Status: 0,
-    s2Mode: 0,
-    s2DelayTime: 5,
     s2Status: 0,
-    s3Mode: 0,
-    s3DelayTime: 5,
     s3Status: 0,
     raw: {
       rawBytes,
-      version: info.version
+      cmd: info.cmd,
+      version: info.version,
+      xorBlock: info.receivedXorBlock,
+      xorAll: info.receivedXorAll
     }
   };
 }
@@ -712,9 +764,9 @@ function createPM100UdpScanner(events) {
   let running = false;
   const deviceMap = /* @__PURE__ */ new Map();
   const defaults = {
+    port: PM100_PORT,
     intervalMs: 2e3,
-    count: 5,
-    mask: SEARCH_MASK
+    count: 5
   };
   function cleanup(reason) {
     running = false;
@@ -743,7 +795,7 @@ function createPM100UdpScanner(events) {
     }
     const intervalMs = Number(opts?.intervalMs ?? defaults.intervalMs);
     const countMax = Number(opts?.count ?? defaults.count);
-    const mask = String(opts?.mask ?? defaults.mask);
+    const bindPort = Number(opts?.port ?? defaults.port);
     cleanup("restart");
     running = true;
     socket = dgram.createSocket({ type: "udp4", reuseAddr: true });
@@ -767,13 +819,13 @@ function createPM100UdpScanner(events) {
       const row = toDeviceRow(info, new Uint8Array(msg));
       const prev = deviceMap.get(row.macStr);
       deviceMap.set(row.macStr, row);
-      if (!prev || prev.deviceIpStr !== row.deviceIpStr || prev.serverIpStr !== row.serverIpStr || prev.serverPort !== row.serverPort) {
+      if (!prev || prev.deviceIpStr !== row.deviceIpStr || prev.subnetStr !== row.subnetStr || prev.gatewayStr !== row.gatewayStr || prev.serverIpStr !== row.serverIpStr || prev.serverPort !== row.serverPort || prev.s1Mode !== row.s1Mode || prev.s2Mode !== row.s2Mode || prev.s3Mode !== row.s3Mode || prev.s1DelayTime !== row.s1DelayTime || prev.s2DelayTime !== row.s2DelayTime || prev.s3DelayTime !== row.s3DelayTime) {
         events.discovered(row);
       }
     });
     await new Promise((resolve, reject) => {
       try {
-        socket.bind(PM100_PORT, () => {
+        socket.bind(bindPort, () => {
           try {
             socket.setBroadcast(true);
             socket.setRecvBufferSize(1024 * 1024);
@@ -785,9 +837,9 @@ function createPM100UdpScanner(events) {
         reject(e);
       }
     });
-    const targets = getBroadcastTargets(mask);
+    const targets = getBroadcastTargets();
     events.log(
-      `Scan start: port=${PM100_PORT}, mask=${mask}, targets=${targets.join(", ")}`
+      `Scan start: bindPort=${bindPort}, devicePort=${PM100_PORT}, targets=${targets.join(", ")}`
     );
     const sendOnce = () => {
       if (!socket || !running) return;
