@@ -675,18 +675,31 @@ function parsePM100Response(msg) {
   const serverPort = msg.readUInt16BE(35);
   return { mac, ip: ip2, serverIp, subnetMask, gateway, serverPort, version };
 }
+function getRandomSixDigit() {
+  return Math.floor(Math.random() * 9e5) + 1e5;
+}
 function toDeviceRow(info, rawBytes) {
   return {
-    key: "sss",
+    key: getRandomSixDigit(),
     type: "UDP",
     // ✅ 여기 추가
     isDetail: false,
+    isEdit: false,
     macStr: info.mac,
     deviceIpStr: info.ip,
     serverIpStr: info.serverIp,
     subnetStr: info.subnetMask,
     gatewayStr: info.gateway,
     serverPort: info.serverPort,
+    s1Mode: 0,
+    s1DelayTime: 5,
+    s1Status: 0,
+    s2Mode: 0,
+    s2DelayTime: 5,
+    s2Status: 0,
+    s3Mode: 0,
+    s3DelayTime: 5,
+    s3Status: 0,
     raw: {
       rawBytes,
       version: info.version

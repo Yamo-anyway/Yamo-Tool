@@ -2,6 +2,9 @@ import React, { useEffect, useRef, useState } from "react";
 import "./styles.css";
 import {
   Box,
+  Button,
+  Dialog,
+  Radio,
   Table,
   TableBody,
   TableCell,
@@ -10,19 +13,27 @@ import {
   TableRow,
 } from "@mui/material";
 import styled from "@emotion/styled";
-import { StyledPage } from "../components/StyledLayout";
-import { StyledButton } from "../components/StyledButton";
 
 export type DeviceRow = {
-  key: string;
+  key: number;
   type: "UDP" | "TCP";
   isDetail: boolean;
+  isEdit: boolean;
   macStr: string;
   deviceIpStr: string;
   serverIpStr: string;
   subnetStr: string;
   gatewayStr: string;
   serverPort: number;
+  s1Mode: number;
+  s1DelayTime: number;
+  s1Status: number;
+  s2Mode: number;
+  s2DelayTime: number;
+  s2Status: number;
+  s3Mode: number;
+  s3DelayTime: number;
+  s3Status: number;
   raw: any;
 };
 
@@ -41,7 +52,9 @@ export default function PM100Tool() {
   const scanningRef = useRef(false);
 
   // (TCP는 여기선 생략)
-  const [isTcpServer, setIsTcpServer] = useState(false);
+  const [isTcpServer, setIsTcpServer] = useState<boolean>(false);
+
+  const [isOpenEdit, setIsOpenEdit] = useState<boolean>(false);
 
   // ✅ 로그 자동 스크롤
   useEffect(() => {
@@ -130,6 +143,30 @@ export default function PM100Tool() {
     try {
       // TODO
     } catch {}
+  };
+
+  const selectDeviceRow = (row: DeviceRow) => {
+    const newDevices = devices.map((el: DeviceRow) => {
+      const newRow = { ...row };
+
+      newRow.isEdit = false;
+
+      if (el.key === newRow.key) {
+        newRow.isDetail = !newRow.isDetail;
+
+        setSelectedRow(newRow);
+      } else {
+        newRow.isDetail = false;
+      }
+
+      return newRow;
+    });
+
+    setDevices(newDevices);
+  };
+
+  const handleSetDeviceDialog = () => {
+    setIsOpenEdit(false);
   };
 
   return (
@@ -263,36 +300,30 @@ export default function PM100Tool() {
               </TableHead>
 
               <TableBody>
-                {devices?.map((row: any, index: number) => {
+                {devices?.map((row: any) => {
                   return (
-                    <React.Fragment key={`device list - ${index}`}>
-                      <TableRow
+                    <TableRow key={`device list - ${row.key}`}>
+                      <StyledTableCell>{row.type}</StyledTableCell>
+                      <StyledTableCell>{row.macStr}</StyledTableCell>
+                      <StyledTableCell>{row.serverIpStr}</StyledTableCell>
+                      <StyledTableCell>{row.serverPort}</StyledTableCell>
+                      <StyledTableCell>{row.deviceIpStr}</StyledTableCell>
+                      <StyledTableCell>{row.subnetStr}</StyledTableCell>
+                      <StyledTableCell>{row.gatewayStr}</StyledTableCell>
+                      <StyledTableCell />
+                      <StyledTableCell />
+                      <StyledTableCell />
+                      <StyledTableCell
                         onClick={() => {
-                          setSelectedRow(row);
+                          setIsOpenEdit(true);
+                          selectDeviceRow(row);
                         }}
                       >
-                        <StyledTableCell>{row.type}</StyledTableCell>
-                        <StyledTableCell>{row.macStr}</StyledTableCell>
-                        <StyledTableCell>{row.serverIpStr}</StyledTableCell>
-                        <StyledTableCell>{row.serverPort}</StyledTableCell>
-                        <StyledTableCell>{row.deviceIpStr}</StyledTableCell>
-                        <StyledTableCell>{row.subnetStr}</StyledTableCell>
-                        <StyledTableCell>{row.gatewayStr}</StyledTableCell>
-                        <StyledTableCell />
-                        <StyledTableCell />
-                        <StyledTableCell />
-                        <StyledTableCell>초기화</StyledTableCell>
-                        <StyledTableCell>수정</StyledTableCell>
-                        <StyledTableCell />
-                      </TableRow>
-                      {row?.isDetail && (
-                        <TableRow>
-                          <TableCell colSpan={100}>
-                            <Box> 상세</Box>
-                          </TableCell>
-                        </TableRow>
-                      )}
-                    </React.Fragment>
+                        수정
+                      </StyledTableCell>
+                      <StyledTableCell />
+                      <StyledTableCell />
+                    </TableRow>
                   );
                 })}
               </TableBody>
@@ -315,9 +346,262 @@ export default function PM100Tool() {
           </div>
         </div>
       </div>
+      {isOpenEdit && selectedRow && (
+        <SetDeviceDialog
+          device={selectedRow}
+          open={isOpenEdit}
+          onClose={handleSetDeviceDialog}
+        />
+      )}
     </StyledPage>
   );
 }
+
+type SetDeviceDialogProps = {
+  device: DeviceRow;
+  open: boolean;
+  onClose: () => void;
+};
+
+const SetDeviceDialog = ({ device, open, onClose }: SetDeviceDialogProps) => {
+  const [editDevice, setEditDevice] = useState<DeviceRow | undefined>();
+
+  useEffect(() => {
+    setEditDevice(device);
+    console.log(device);
+  }, [device]);
+
+  return (
+    <Dialog
+      onClose={() => {}}
+      open={open}
+      fullWidth
+      slotProps={{
+        paper: {
+          sx: {
+            width: 900,
+            height: 350,
+            maxWidth: "none",
+            overflowX: "hidden",
+          },
+        },
+      }}
+    >
+      <div style={{ padding: "10px" }}>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            marginBottom: "10px",
+          }}
+        >
+          <div>
+            {editDevice?.type === "TCP" && "TCP"}
+            {editDevice?.type === "UDP" &&
+              `UDP(mac: ${editDevice.macStr})`}{" "}
+            장치 설정
+          </div>
+          <div>
+            <StyledDialogButton onClick={onClose}>초기화</StyledDialogButton>
+            <StyledDialogButton onClick={onClose}>업데이트</StyledDialogButton>
+            <StyledDialogButton onClick={onClose}>닫기</StyledDialogButton>
+          </div>
+        </div>
+        <div>
+          <div style={{ padding: "10px" }}>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                marginBottom: "10px",
+              }}
+            >
+              <div
+                style={{
+                  marginRight: "20px",
+                  width: "100px",
+                }}
+              >
+                Server IP
+              </div>
+              <div style={{ marginRight: "20px" }}>
+                <StyledInputIp value={editDevice?.serverIpStr} />
+              </div>
+
+              <div
+                style={{
+                  marginRight: "20px",
+                  width: "100px",
+                }}
+              >
+                Port
+              </div>
+              <div style={{ marginRight: "20px" }}>
+                <StyledInputIp value={editDevice?.serverPort} />
+              </div>
+            </div>
+            <div style={{ display: "flex" }}>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  marginBottom: "10px",
+                }}
+              >
+                <div
+                  style={{
+                    marginRight: "20px",
+                    width: "100px",
+                  }}
+                >
+                  Device IP
+                </div>
+                <div style={{ marginRight: "20px" }}>
+                  <StyledInputIp value={editDevice?.deviceIpStr} />
+                </div>
+                <div
+                  style={{
+                    marginRight: "20px",
+                    width: "100px",
+                  }}
+                >
+                  Subnet Mask
+                </div>
+                <div style={{ marginRight: "20px" }}>
+                  <StyledInputIp value={editDevice?.subnetStr} />
+                </div>
+                <div
+                  style={{
+                    marginRight: "20px",
+                    width: "100px",
+                  }}
+                >
+                  Gateway
+                </div>
+                <div style={{ marginRight: "20px" }}>
+                  <StyledInputIp value={editDevice?.gatewayStr} />
+                </div>
+              </div>
+            </div>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                marginBottom: "10px",
+              }}
+            >
+              <div style={{ marginRight: "20px" }}>Sensor #1</div>
+              <div style={{ marginRight: "20px" }}>
+                <Radio
+                  checked={editDevice?.s1Mode === 0}
+                  onClick={() => {
+                    setEditDevice((prev) =>
+                      prev ? { ...prev, s1Mode: 0 } : prev,
+                    );
+                  }}
+                />
+                Nc
+              </div>
+              <div style={{ marginRight: "20px" }}>
+                <Radio
+                  checked={editDevice?.s1Mode === 1}
+                  onClick={() => {
+                    setEditDevice((prev) =>
+                      prev ? { ...prev, s1Mode: 1 } : prev,
+                    );
+                  }}
+                />
+                No
+              </div>
+              <div style={{ marginRight: "20px" }}>지연시간</div>
+              <div style={{ marginRight: "5px" }}>
+                <StyledInputDelayTime value={editDevice?.s1DelayTime} />
+              </div>
+              <div style={{ marginRight: "20px" }}>ms</div>
+            </div>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                marginBottom: "10px",
+              }}
+            >
+              <div style={{ marginRight: "20px" }}> Sensor #2</div>
+              <div style={{ marginRight: "20px" }}>
+                <Radio
+                  checked={editDevice?.s2Mode === 0}
+                  onClick={() => {
+                    setEditDevice((prev) =>
+                      prev ? { ...prev, s2Mode: 0 } : prev,
+                    );
+                  }}
+                />
+                Nc
+              </div>
+              <div style={{ marginRight: "20px" }}>
+                <Radio
+                  checked={editDevice?.s2Mode === 1}
+                  onClick={() => {
+                    setEditDevice((prev) =>
+                      prev ? { ...prev, s2Mode: 1 } : prev,
+                    );
+                  }}
+                />
+                No
+              </div>
+              <div style={{ marginRight: "20px" }}>지연시간</div>
+              <div style={{ marginRight: "5px" }}>
+                <StyledInputDelayTime value={editDevice?.s2DelayTime} />
+              </div>
+              <div style={{ marginRight: "20px" }}>ms</div>
+            </div>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                marginBottom: "10px",
+              }}
+            >
+              <div style={{ marginRight: "20px" }}> Sensor #3</div>
+              <div style={{ marginRight: "20px" }}>
+                <Radio
+                  checked={editDevice?.s3Mode === 0}
+                  onClick={() => {
+                    setEditDevice((prev) =>
+                      prev ? { ...prev, s3Mode: 0 } : prev,
+                    );
+                  }}
+                />
+                Nc
+              </div>
+              <div style={{ marginRight: "20px" }}>
+                <Radio
+                  checked={editDevice?.s3Mode === 1}
+                  onClick={() => {
+                    setEditDevice((prev) =>
+                      prev ? { ...prev, s3Mode: 1 } : prev,
+                    );
+                  }}
+                />
+                No
+              </div>
+              <div style={{ marginRight: "20px" }}>지연시간</div>
+              <div style={{ marginRight: "5px" }}>
+                <StyledInputDelayTime value={editDevice?.s3DelayTime} />
+              </div>
+              <div style={{ marginRight: "20px" }}>ms</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Dialog>
+  );
+};
+
+const StyledPage = styled(Box)`
+  padding: 20px;
+`;
 
 const StyledTableHeadCell = styled(TableCell)`
   color: white;
@@ -343,15 +627,64 @@ const StyledTableCell = styled(TableCell)`
   border: 1px solid rgba(145, 158, 171, 0.32) !important;
 `;
 
-// const StyledTableCell = styled(TableCell)`
-//   color: white;
-//   display: table-cell !important;
-//   text-align: center !important;
-//   vertical-align: middle !important;
-//   font-size: 0.7rem !important;
-//   margin: 0 !important;
-//   padding: 0 !important;
-//   height: 20px !important;
-//   width: 200px !important;
-//   border: 1px solid rgba(145, 158, 171, 0.32) !important;
-// `;
+const StyledInputIp = styled.input`
+  color: black;
+  background: transparent;
+
+  text-align: center;
+  font-size: 0.9rem;
+
+  margin: 0;
+  padding: 0 6px;
+
+  height: 30px;
+  width: 150px;
+
+  line-height: 20px; /* 세로 가운데 핵심 */
+
+  border: 1px solid rgba(145, 158, 171, 0.32);
+  box-sizing: border-box;
+`;
+
+const StyledButton = styled(Button)`
+  border: 1px solid #ffffff;
+  text-transform: none;
+  margin-right: 10px;
+
+  height: 30px;
+`;
+
+const StyledDialogButton = styled(Button)`
+  border: 1px solid #000000;
+  color: #000000;
+  text-transform: none;
+  margin-right: 10px;
+
+  height: 30px;
+
+  &:hover {
+    border: 1px solid red;
+    color: blue;
+    font-weight: bold;
+    background-color: transparent; /* MUI 기본 hover 배경 제거 */
+  }
+`;
+
+const StyledInputDelayTime = styled.input`
+  color: white;
+  background: transparent;
+
+  text-align: center;
+  font-size: 0.7rem;
+
+  margin: 0;
+  padding: 0 6px;
+
+  height: 30px;
+  width: 50px;
+
+  line-height: 20px; /* 세로 가운데 핵심 */
+
+  border: 1px solid rgba(145, 158, 171, 0.32);
+  box-sizing: border-box;
+`;
