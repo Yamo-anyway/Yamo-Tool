@@ -46,6 +46,12 @@ declare global {
               cb: (p: { remote: string; length: number; hex: string }) => void,
             ) => () => void;
 
+            send: (p: {
+              deviceIpStr: string;
+              cmd: number;
+              data?: number[];
+            }) => Promise<boolean>;
+
             onDevice: (cb: (row: DeviceRow) => void) => () => void;
           };
           udp: {

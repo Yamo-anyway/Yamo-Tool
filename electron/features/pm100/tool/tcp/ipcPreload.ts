@@ -28,6 +28,9 @@ export const pm100ToolTcpApi = {
     return () => ipcRenderer.removeListener("pm100:tool:tcp:raw", handler);
   },
 
+  send: (p: { deviceIpStr: string; cmd: number; data?: number[] }) =>
+    ipcRenderer.invoke("pm100:tcp:send", p),
+
   onDevice: (cb: (row: any) => void) => {
     const handler = (_evt: any, row: any) => cb(row);
     ipcRenderer.on("pm100:tool:tcp:device", handler);

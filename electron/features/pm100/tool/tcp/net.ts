@@ -20,6 +20,7 @@ function toHexSpaced(buf: Buffer, maxBytes = 512) {
     : spaced;
 }
 
+const CGDI = Buffer.from([0x43, 0x47, 0x44, 0x49]); // "CGDI"
 const HDR = Buffer.from([0x43, 0x47, 0x44, 0x49, 0x7f]); // "CGDI" + 0x7F
 const FRAME_LEN = 36;
 
@@ -27,6 +28,17 @@ function xorChecksum(buf: Buffer): number {
   let x = 0;
   for (const b of buf) x ^= b;
   return x & 0xff;
+}
+
+// ✅ 초기화 포함 CGDI 명령 패킷 생성
+// - init: "CGDI" + 0x3E + checksum  => 6 bytes
+// - update: "CGDI" + 0x1E + data + checksum
+function buildCgdiPacket(cmd: number, data?: number[]): Buffer {
+  const head = Buffer.concat([CGDI, Buffer.from([cmd & 0xff])]); // 5 bytes
+  const body = data && data.length ? Buffer.from(data) : Buffer.alloc(0);
+  const withoutCs = Buffer.concat([head, body]);
+  const cs = xorChecksum(withoutCs);
+  return Buffer.concat([withoutCs, Buffer.from([cs])]);
 }
 
 function formatIpBytes(b: Buffer, off: number) {
@@ -56,7 +68,6 @@ function parseTcpFrame(frame: Buffer) {
   const subnetStr = formatIpBytes(frame, 9);
   const gatewayStr = formatIpBytes(frame, 13);
   const serverIpStr = formatIpBytes(frame, 17);
-
   const serverPort = frame.readUInt16BE(21);
 
   const s1Mode = frame[23];
@@ -92,6 +103,10 @@ function parseTcpFrame(frame: Buffer) {
     s2Mode,
     s3Mode,
 
+    s1Enable,
+    s2Enable,
+    s3Enable,
+
     s1DelayTime,
     s2DelayTime,
     s3DelayTime,
@@ -111,14 +126,23 @@ function parseTcpFrame(frame: Buffer) {
   };
 }
 
+function normalizeRemoteIp(addr: string | undefined | null) {
+  const s = String(addr ?? "").trim();
+  // node가 IPv4를 ::ffff:192.168.0.10 형태로 줄 때 제거
+  if (s.startsWith("::ffff:")) return s.slice(7);
+  return s;
+}
+
 export function createPM100ToolTcpServer(events: TcpToolEvents) {
   let server: Server | null = null;
   let running = false;
   let boundPort: number | undefined;
   let boundHost: string | undefined;
 
-  // ✅ 핵심: 현재 연결된 소켓을 추적해서 stop 때 전부 끊는다
   const sockets = new Set<Socket>();
+
+  // ✅ deviceIpStr -> socket 매핑 (TCP 명령 보낼 타겟)
+  const socketByDeviceIp = new Map<string, Socket>();
 
   function emitStatus() {
     events.status({ running, port: boundPort, host: boundHost });
@@ -132,18 +156,27 @@ export function createPM100ToolTcpServer(events: TcpToolEvents) {
         server = net.createServer((socket: Socket) => {
           sockets.add(socket);
 
-          const remote = `${socket.remoteAddress}:${socket.remotePort}`;
+          const remoteIp = normalizeRemoteIp(socket.remoteAddress);
+          const remote = `${remoteIp}:${socket.remotePort}`;
+
           events.client({ type: "connect", remote });
           events.log(`TCP client connected: ${remote}`);
 
           socket.on("close", () => {
             sockets.delete(socket);
+            // 매핑 제거
+            for (const [ip, s] of socketByDeviceIp.entries()) {
+              if (s === socket) socketByDeviceIp.delete(ip);
+            }
             events.client({ type: "close", remote });
             events.log(`TCP client closed: ${remote}`);
           });
 
           socket.on("error", (e) => {
             sockets.delete(socket);
+            for (const [ip, s] of socketByDeviceIp.entries()) {
+              if (s === socket) socketByDeviceIp.delete(ip);
+            }
             events.log(
               `TCP socket error ${remote}: ${String((e as any)?.message ?? e)}`,
             );
@@ -151,20 +184,16 @@ export function createPM100ToolTcpServer(events: TcpToolEvents) {
 
           let rxBuf = Buffer.alloc(0);
 
-          // ✅ data 리스너는 하나만!
           socket.on("data", (chunk: Buffer) => {
-            // 1) raw 로그
             const hex = toHexSpaced(chunk);
             events.raw({ remote, length: chunk.length, hex });
             events.log(`TCP RX ${remote} (${chunk.length} bytes)\n${hex}`);
 
-            // 2) 누적 + 프레임 파싱
             rxBuf = Buffer.concat([rxBuf, chunk]);
 
             while (rxBuf.length >= 5) {
               const idx = rxBuf.indexOf(HDR);
               if (idx < 0) {
-                // 헤더가 없으면 너무 커지기 전에 일부만 유지
                 if (rxBuf.length > 4096)
                   rxBuf = rxBuf.subarray(rxBuf.length - 4);
                 break;
@@ -177,7 +206,12 @@ export function createPM100ToolTcpServer(events: TcpToolEvents) {
               rxBuf = rxBuf.subarray(FRAME_LEN);
 
               const row = parseTcpFrame(frame);
-              if (row) events.device(row);
+              if (!row) continue;
+
+              // ✅ 장치 IP 기준으로 socket 매핑 저장
+              socketByDeviceIp.set(row.deviceIpStr, socket);
+
+              events.device(row);
             }
           });
         });
@@ -211,15 +245,14 @@ export function createPM100ToolTcpServer(events: TcpToolEvents) {
   }
 
   async function stopServer() {
-    // ✅ 1) 기존 연결을 먼저 전부 끊는다 (그래야 stop 후에도 RX 안 옴)
     for (const sock of sockets) {
       try {
         sock.destroy();
       } catch {}
     }
     sockets.clear();
+    socketByDeviceIp.clear();
 
-    // ✅ 2) 서버 accept 중단
     const s = server;
     server = null;
 
@@ -257,5 +290,50 @@ export function createPM100ToolTcpServer(events: TcpToolEvents) {
     return { running, port: boundPort, host: boundHost };
   }
 
-  return { startServer, stopServer, getStatus, isRunning: () => running };
+  // ✅ TCP로 명령 전송
+  async function sendToDevice(
+    deviceIpStr: string,
+    cmd: number,
+    data?: number[],
+  ) {
+    const ip = String(deviceIpStr ?? "").trim();
+    if (!ip) return false;
+
+    const sock = socketByDeviceIp.get(ip);
+    if (!sock || sock.destroyed) {
+      events.log(`TCP send failed: no active socket for device ${ip}`);
+      return false;
+    }
+
+    const packet = buildCgdiPacket(cmd, data);
+
+    return await new Promise<boolean>((resolve) => {
+      try {
+        sock.write(packet, (err) => {
+          if (err) {
+            events.log(
+              `TCP send error ${ip}: ${String((err as any)?.message ?? err)}`,
+            );
+            resolve(false);
+            return;
+          }
+          events.log(
+            `TCP TX ${ip} (${packet.length} bytes)\n${toHexSpaced(packet)}`,
+          );
+          resolve(true);
+        });
+      } catch (e: any) {
+        events.log(`TCP send exception ${ip}: ${String(e?.message ?? e)}`);
+        resolve(false);
+      }
+    });
+  }
+
+  return {
+    startServer,
+    stopServer,
+    getStatus,
+    sendToDevice,
+    isRunning: () => running,
+  };
 }

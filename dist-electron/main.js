@@ -664,38 +664,56 @@ function formatIp(msg, offset) {
   return `${msg[offset]}.${msg[offset + 1]}.${msg[offset + 2]}.${msg[offset + 3]}`;
 }
 function parsePM100Response(msg) {
-  if (msg.length < 41) return null;
+  if (msg.length < 47) return null;
   const tag = msg.slice(0, 6).toString("ascii");
   if (tag !== "CG_RES") return null;
   let o = 6;
   const mac = formatMac(msg, o);
   o += 6;
   const blockOffset = o;
-  const blockLen = 27;
+  let blockLen = 0;
   const cmd = msg[o];
   o += 1;
+  blockLen += 1;
   const verMajor = msg[o];
   const verMinor = msg[o + 1];
   const version = `${verMajor}.${verMinor}`;
   o += 2;
+  blockLen += 2;
   const ip2 = formatIp(msg, o);
   o += 4;
+  blockLen += 4;
   const subnetMask = formatIp(msg, o);
   o += 4;
+  blockLen += 4;
   const gateway = formatIp(msg, o);
   o += 4;
+  blockLen += 4;
   const serverIp = formatIp(msg, o);
   o += 4;
+  blockLen += 4;
   const serverPort = msg.readUInt16BE(o);
   o += 2;
+  blockLen += 2;
   const s1Mode = msg[o];
   const s2Mode = msg[o + 1];
   const s3Mode = msg[o + 2];
   o += 3;
+  blockLen += 3;
+  const s1Enable = msg[o];
+  const s2Enable = msg[o + 1];
+  const s3Enable = msg[o + 2];
+  o += 3;
+  blockLen += 3;
   const s1DelayTime = msg[o];
   const s2DelayTime = msg[o + 1];
   const s3DelayTime = msg[o + 2];
   o += 3;
+  blockLen += 3;
+  o += 3;
+  blockLen += 3;
+  o += 1;
+  blockLen += 1;
   const receivedXorBlock = msg[o];
   const receivedXorAll = msg[o + 1];
   const block = msg.slice(blockOffset, blockOffset + blockLen);
@@ -715,6 +733,9 @@ function parsePM100Response(msg) {
     s1Mode,
     s2Mode,
     s3Mode,
+    s1Enable,
+    s2Enable,
+    s3Enable,
     s1DelayTime,
     s2DelayTime,
     s3DelayTime,
@@ -742,6 +763,9 @@ function toDeviceRow(info, rawBytes) {
     s1Mode: info.s1Mode,
     s2Mode: info.s2Mode,
     s3Mode: info.s3Mode,
+    s1Enable: info.s1Enable,
+    s2Enable: info.s2Enable,
+    s3Enable: info.s3Enable,
     s1DelayTime: info.s1DelayTime,
     s2DelayTime: info.s2DelayTime,
     s3DelayTime: info.s3DelayTime,
@@ -1145,12 +1169,20 @@ function toHexSpaced(buf, maxBytes = 512) {
   const spaced = hex.match(/.{1,2}/g)?.join(" ") ?? "";
   return buf.length > maxBytes ? spaced + ` ... (+${buf.length - maxBytes} bytes)` : spaced;
 }
+const CGDI = Buffer.from([67, 71, 68, 73]);
 const HDR = Buffer.from([67, 71, 68, 73, 127]);
 const FRAME_LEN = 36;
 function xorChecksum(buf) {
   let x = 0;
   for (const b of buf) x ^= b;
   return x & 255;
+}
+function buildCgdiPacket(cmd, data) {
+  const head = Buffer.concat([CGDI, Buffer.from([cmd & 255])]);
+  const body = data && data.length ? Buffer.from(data) : Buffer.alloc(0);
+  const withoutCs = Buffer.concat([head, body]);
+  const cs = xorChecksum(withoutCs);
+  return Buffer.concat([withoutCs, Buffer.from([cs])]);
 }
 function formatIpBytes(b, off) {
   return `${b[off]}.${b[off + 1]}.${b[off + 2]}.${b[off + 3]}`;
@@ -1197,6 +1229,9 @@ function parseTcpFrame(frame) {
     s1Mode,
     s2Mode,
     s3Mode,
+    s1Enable,
+    s2Enable,
+    s3Enable,
     s1DelayTime,
     s2DelayTime,
     s3DelayTime,
@@ -1213,12 +1248,18 @@ function parseTcpFrame(frame) {
     }
   };
 }
+function normalizeRemoteIp(addr) {
+  const s = String(addr ?? "").trim();
+  if (s.startsWith("::ffff:")) return s.slice(7);
+  return s;
+}
 function createPM100ToolTcpServer(events) {
   let server2 = null;
   let running = false;
   let boundPort;
   let boundHost;
   const sockets = /* @__PURE__ */ new Set();
+  const socketByDeviceIp = /* @__PURE__ */ new Map();
   function emitStatus() {
     events.status({ running, port: boundPort, host: boundHost });
   }
@@ -1228,16 +1269,23 @@ function createPM100ToolTcpServer(events) {
       try {
         server2 = net.createServer((socket) => {
           sockets.add(socket);
-          const remote = `${socket.remoteAddress}:${socket.remotePort}`;
+          const remoteIp = normalizeRemoteIp(socket.remoteAddress);
+          const remote = `${remoteIp}:${socket.remotePort}`;
           events.client({ type: "connect", remote });
           events.log(`TCP client connected: ${remote}`);
           socket.on("close", () => {
             sockets.delete(socket);
+            for (const [ip2, s] of socketByDeviceIp.entries()) {
+              if (s === socket) socketByDeviceIp.delete(ip2);
+            }
             events.client({ type: "close", remote });
             events.log(`TCP client closed: ${remote}`);
           });
           socket.on("error", (e) => {
             sockets.delete(socket);
+            for (const [ip2, s] of socketByDeviceIp.entries()) {
+              if (s === socket) socketByDeviceIp.delete(ip2);
+            }
             events.log(
               `TCP socket error ${remote}: ${String(e?.message ?? e)}`
             );
@@ -1261,7 +1309,9 @@ ${hex}`);
               const frame = rxBuf.subarray(0, FRAME_LEN);
               rxBuf = rxBuf.subarray(FRAME_LEN);
               const row = parseTcpFrame(frame);
-              if (row) events.device(row);
+              if (!row) continue;
+              socketByDeviceIp.set(row.deviceIpStr, socket);
+              events.device(row);
             }
           });
         });
@@ -1300,6 +1350,7 @@ ${hex}`);
       }
     }
     sockets.clear();
+    socketByDeviceIp.clear();
     const s = server2;
     server2 = null;
     if (!s) {
@@ -1333,7 +1384,44 @@ ${hex}`);
   function getStatus() {
     return { running, port: boundPort, host: boundHost };
   }
-  return { startServer, stopServer, getStatus, isRunning: () => running };
+  async function sendToDevice(deviceIpStr, cmd, data) {
+    const ip2 = String(deviceIpStr ?? "").trim();
+    if (!ip2) return false;
+    const sock = socketByDeviceIp.get(ip2);
+    if (!sock || sock.destroyed) {
+      events.log(`TCP send failed: no active socket for device ${ip2}`);
+      return false;
+    }
+    const packet = buildCgdiPacket(cmd, data);
+    return await new Promise((resolve) => {
+      try {
+        sock.write(packet, (err) => {
+          if (err) {
+            events.log(
+              `TCP send error ${ip2}: ${String(err?.message ?? err)}`
+            );
+            resolve(false);
+            return;
+          }
+          events.log(
+            `TCP TX ${ip2} (${packet.length} bytes)
+${toHexSpaced(packet)}`
+          );
+          resolve(true);
+        });
+      } catch (e) {
+        events.log(`TCP send exception ${ip2}: ${String(e?.message ?? e)}`);
+        resolve(false);
+      }
+    });
+  }
+  return {
+    startServer,
+    stopServer,
+    getStatus,
+    sendToDevice,
+    isRunning: () => running
+  };
 }
 function getLocalIPv4s() {
   const nets = os.networkInterfaces();
@@ -1386,6 +1474,21 @@ function registerPM100ToolTcpMainIPC(getWin) {
       return [];
     }
   });
+  ipcMain.handle(
+    "pm100:tcp:send",
+    async (_evt, args) => {
+      try {
+        const ip2 = String(args?.deviceIpStr ?? "").trim();
+        const cmd = Number(args?.cmd) & 255;
+        const data = Array.isArray(args?.data) ? args.data : void 0;
+        const ok = await tcp.sendToDevice(ip2, cmd, data);
+        return !!ok;
+      } catch (e) {
+        events.log(`tcp:send failed: ${String(e?.message ?? e)}`);
+        return false;
+      }
+    }
+  );
   ipcMain.handle("pm100:tool:tcp:getStatus", async () => {
     return tcp.getStatus();
   });

@@ -26,12 +26,15 @@ export type DeviceRow = {
   gatewayStr: string;
   serverPort: number;
   s1Mode: number;
+  s1Enable: number;
   s1DelayTime: number;
   s1Status: number;
   s2Mode: number;
+  s2Enable: number;
   s2DelayTime: number;
   s2Status: number;
   s3Mode: number;
+  s3Enable: number;
   s3DelayTime: number;
   s3Status: number;
   raw: any;
@@ -256,54 +259,6 @@ export default function PM100Tool() {
     }
   };
 
-  // const onTcpServerStartStop = async () => {
-  //   try {
-  //     // ✅ 최신 상태 확인
-  //     const st = await window.api.pm100.setup.getStatus();
-  //     const running = !!st?.running;
-
-  //     if (isTcpServer) {
-  //       // ✅ "서버 정지" 버튼: stop만
-  //       const okStop = await window.api.pm100.setup.stopServer();
-  //       if (!okStop) {
-  //         alert("TCP 서버 정지 실패");
-  //         return;
-  //       }
-  //       setIsTcpServer(false); // ✅ Port 활성화
-  //       setLog((p) => (p ? p + `\n🛑 TCP 서버 정지` : `🛑 TCP 서버 정지`));
-  //       return;
-  //     }
-
-  //     // ✅ "서버 시작" 버튼: running이면 stop 후 start(재시작), 아니면 start
-  //     if (running) {
-  //       const okStop = await window.api.pm100.setup.stopServer();
-  //       if (!okStop) {
-  //         alert("TCP 서버 정지 실패(재시작 불가)");
-  //         return;
-  //       }
-  //     }
-
-  //     const host = await getTcpBindHost();
-  //     const okStart = await window.api.pm100.setup.startServer(
-  //       tcpServerPort,
-  //       host,
-  //     );
-  //     if (!okStart) {
-  //       alert("TCP 서버 시작 실패");
-  //       return;
-  //     }
-
-  //     setIsTcpServer(true); // ✅ Port 비활성화
-  //     setLog((p) =>
-  //       p
-  //         ? p + `\n✅ TCP 서버 시작: ${host}:${tcpServerPort}`
-  //         : `✅ TCP 서버 시작: ${host}:${tcpServerPort}`,
-  //     );
-  //   } catch (e: any) {
-  //     alert(`TCP 서버 오류: ${e?.message ?? e}`);
-  //   }
-  // };
-
   const selectDeviceRow = (row: DeviceRow) => {
     const newDevices = devices.map((el: DeviceRow) => {
       const newRow = { ...row };
@@ -413,67 +368,75 @@ export default function PM100Tool() {
               <TableHead>
                 <TableRow>
                   <StyledTableHeadCell
+                    rowSpan={2}
                     sx={{ width: 50, minWidth: 50, maxWidth: 50 }}
                   >
                     Type
                   </StyledTableHeadCell>
                   <StyledTableHeadCell
+                    rowSpan={2}
                     sx={{ width: 120, minWidth: 120, maxWidth: 120 }}
                   >
                     Mac
                   </StyledTableHeadCell>
                   <StyledTableHeadCell
+                    rowSpan={2}
                     sx={{ width: 100, minWidth: 100, maxWidth: 100 }}
                   >
                     Server IP
                   </StyledTableHeadCell>
                   <StyledTableHeadCell
+                    rowSpan={2}
                     sx={{ width: 50, minWidth: 50, maxWidth: 50 }}
                   >
                     Port
                   </StyledTableHeadCell>
                   <StyledTableHeadCell
+                    rowSpan={2}
                     sx={{ width: 100, minWidth: 100, maxWidth: 100 }}
                   >
                     Device IP
                   </StyledTableHeadCell>
                   <StyledTableHeadCell
+                    rowSpan={2}
                     sx={{ width: 100, minWidth: 100, maxWidth: 100 }}
                   >
                     Subnet Mask
                   </StyledTableHeadCell>
                   <StyledTableHeadCell
+                    rowSpan={2}
                     sx={{ width: 100, minWidth: 100, maxWidth: 100 }}
                   >
                     Gateway
                   </StyledTableHeadCell>
                   <StyledTableHeadCell
-                    sx={{ width: 80, minWidth: 80, maxWidth: 80 }}
+                    colSpan={2}
+                    sx={{ width: 150, minWidth: 80, maxWidth: 80 }}
                   >
                     S1
                   </StyledTableHeadCell>
                   <StyledTableHeadCell
-                    sx={{ width: 80, minWidth: 80, maxWidth: 80 }}
+                    colSpan={2}
+                    sx={{ width: 150, minWidth: 80, maxWidth: 80 }}
                   >
                     S2
                   </StyledTableHeadCell>
                   <StyledTableHeadCell
-                    sx={{ width: 80, minWidth: 80, maxWidth: 80 }}
+                    colSpan={2}
+                    sx={{ width: 150, minWidth: 80, maxWidth: 80 }}
                   >
                     S3
                   </StyledTableHeadCell>
-                  <StyledTableHeadCell
-                    sx={{ width: 80, minWidth: 80, maxWidth: 80 }}
-                  />
-                  <StyledTableHeadCell
-                    sx={{ width: 80, minWidth: 80, maxWidth: 80 }}
-                  />
-
-                  <StyledTableHeadCell sx={{ width: "auto" }} />
-                  {/* <StyledTableHeaerCell sx={{ maxWidth: "100%" }} /> */}
+                </TableRow>
+                <TableRow>
+                  <StyledTableHeadCell>NC/NO</StyledTableHeadCell>
+                  <StyledTableHeadCell>DelayTime</StyledTableHeadCell>
+                  <StyledTableHeadCell>NC/NO</StyledTableHeadCell>
+                  <StyledTableHeadCell>DelayTime</StyledTableHeadCell>
+                  <StyledTableHeadCell>NC/NO</StyledTableHeadCell>
+                  <StyledTableHeadCell>DelayTime</StyledTableHeadCell>
                 </TableRow>
               </TableHead>
-
               <TableBody>
                 {devices?.map((row: any) => {
                   const isTcp = row.type === "TCP";
@@ -502,6 +465,10 @@ export default function PM100Tool() {
                           boxShadow: "0 3px 10px rgba(0,0,0,0.25)",
                         },
                       }}
+                      onClick={() => {
+                        setIsOpenEdit(true);
+                        selectDeviceRow(row);
+                      }}
                     >
                       <StyledTableCell>{row.type}</StyledTableCell>
                       <StyledTableCell>{row.macStr}</StyledTableCell>
@@ -510,36 +477,18 @@ export default function PM100Tool() {
                       <StyledTableCell>{row.deviceIpStr}</StyledTableCell>
                       <StyledTableCell>{row.subnetStr}</StyledTableCell>
                       <StyledTableCell>{row.gatewayStr}</StyledTableCell>
-
-                      <StyledTableCell sx={sCellStyle(row.s1Status)}>
-                        {`${row.s1Mode === 0 ? "NC" : "NO"} (${row.s1DelayTime}s)`}
-                      </StyledTableCell>
-                      <StyledTableCell sx={sCellStyle(row.s2Status)}>
-                        {`${row.s2Mode === 0 ? "NC" : "NO"} (${row.s2DelayTime}s)`}
-                      </StyledTableCell>
-                      <StyledTableCell sx={sCellStyle(row.s3Status)}>
-                        {`${row.s3Mode === 0 ? "NC" : "NO"} (${row.s3DelayTime}s)`}
-                      </StyledTableCell>
-                      {/*                       
-                      <StyledTableCell>
-                        {`${row.s1Mode === 0 ? "NC" : "NO"} (${row.s1DelayTime}s)`}
-                      </StyledTableCell>
-                      <StyledTableCell>
-                        {`${row.s2Mode === 0 ? "NC" : "NO"} (${row.s2DelayTime}s)`}
-                      </StyledTableCell>
-                      <StyledTableCell>
-                        {`${row.s3Mode === 0 ? "NC" : "NO"} (${row.s3DelayTime}s)`}
-                      </StyledTableCell> */}
                       <StyledTableCell
-                        onClick={() => {
-                          setIsOpenEdit(true);
-                          selectDeviceRow(row);
-                        }}
-                      >
-                        수정
-                      </StyledTableCell>
-                      <StyledTableCell />
-                      <StyledTableCell />
+                        sx={sCellStyle(row.s1Status)}
+                      >{`${row.s1Mode === 0 ? "NC" : "NO"}`}</StyledTableCell>
+                      <StyledTableCell>{`${row.s1DelayTime}s`}</StyledTableCell>
+                      <StyledTableCell
+                        sx={sCellStyle(row.s2Status)}
+                      >{`${row.s2Mode === 0 ? "NC" : "NO"}`}</StyledTableCell>
+                      <StyledTableCell>{`${row.s2DelayTime}s`}</StyledTableCell>
+                      <StyledTableCell
+                        sx={sCellStyle(row.s3Status)}
+                      >{`${row.s3Mode === 0 ? "NC" : "NO"}`}</StyledTableCell>
+                      <StyledTableCell>{`${row.s3DelayTime}s`}</StyledTableCell>
                     </TableRow>
                   );
                 })}
@@ -581,10 +530,13 @@ type SetDeviceDialogProps = {
 };
 
 const SetDeviceDialog = ({ device, open, onClose }: SetDeviceDialogProps) => {
+  const [deviceIpStr, setDeviceIpStr] = useState<string>();
+
   const [editDevice, setEditDevice] = useState<DeviceRow | undefined>();
   const [locked, setLocked] = useState(false);
 
   useEffect(() => {
+    setDeviceIpStr(device.deviceIpStr);
     setEditDevice(device);
     setLocked(false);
   }, [device]);
@@ -592,27 +544,28 @@ const SetDeviceDialog = ({ device, open, onClose }: SetDeviceDialogProps) => {
   const handleCommandInit = async () => {
     if (!editDevice) return;
 
-    const deviceIp = (editDevice.deviceIpStr ?? "").trim();
-
-    if (!deviceIp) {
-      alert("Device IP가 비어있습니다.");
-      return;
-    }
-
     try {
-      // ✅ 새로 만든 API 호출
-      const ok = await window.api.pm100.tool.udp.sendUdp({
-        macStr: editDevice.macStr,
-        cmd: 0x0f,
-        // data: []  // 생략 가능
-      });
-
-      if (!ok) {
-        alert("초기화 UDP 전송 실패");
+      if (editDevice.type === "TCP") {
+        const ok = await window.api.pm100.tool.tcp.send({
+          deviceIpStr: deviceIpStr ?? "",
+          cmd: 0x3e,
+          // data 생략하면 0 패딩 30바이트로 송신되게 net.ts에서 처리해도 되고,
+          // 여기서 명시적으로 넣어도 됨:
+          // data: new Array(30).fill(0),
+        });
+        if (!ok) return alert("TCP 초기화 전송 실패");
+        alert("TCP 초기화 전송 완료");
+        setLocked(true);
         return;
       }
 
-      alert("초기화 UDP 전송 완료");
+      // UDP 장치면 기존 UDP 로직
+      const ok = await window.api.pm100.tool.udp.sendUdp({
+        macStr: editDevice.macStr,
+        cmd: 0x0f,
+      });
+      if (!ok) return alert("UDP 초기화 전송 실패");
+      alert("UDP 초기화 전송 완료");
       setLocked(true);
     } catch (e: any) {
       alert(`초기화 오류: ${e?.message ?? e}`);
@@ -622,38 +575,22 @@ const SetDeviceDialog = ({ device, open, onClose }: SetDeviceDialogProps) => {
   const handleCommandSetConfig = async () => {
     if (!editDevice) return;
 
-    // ✅ 1) 입력값 검증
+    // 공통 검증 함수(이미 너 코드에 있음) 그대로 사용
     const deviceIp = parseIPv4ToBytes(editDevice.deviceIpStr);
-    if (!deviceIp) {
-      alert("Device IP 형식이 올바르지 않습니다. (예: 192.168.0.10)");
-      return;
-    }
+    if (!deviceIp) return alert("Device IP 형식이 올바르지 않습니다.");
 
     const subnet = parseIPv4ToBytes(editDevice.subnetStr);
-    if (!subnet) {
-      alert("Subnet Mask 형식이 올바르지 않습니다. (예: 255.255.255.0)");
-      return;
-    }
+    if (!subnet) return alert("Subnet Mask 형식이 올바르지 않습니다.");
 
     const gateway = parseIPv4ToBytes(editDevice.gatewayStr);
-    if (!gateway) {
-      alert("Gateway 형식이 올바르지 않습니다.");
-      return;
-    }
+    if (!gateway) return alert("Gateway 형식이 올바르지 않습니다.");
 
     const serverIp = parseIPv4ToBytes(editDevice.serverIpStr);
-    if (!serverIp) {
-      alert("Server IP 형식이 올바르지 않습니다.");
-      return;
-    }
+    if (!serverIp) return alert("Server IP 형식이 올바르지 않습니다.");
 
     const portBytes = u16beBytes(Number(editDevice.serverPort));
-    if (!portBytes) {
-      alert("Port 값이 올바르지 않습니다. (1~65535)");
-      return;
-    }
+    if (!portBytes) return alert("Port 값이 올바르지 않습니다. (1~65535)");
 
-    // mode: NC=0, NO=1 (이미 state가 0/1이라 가정)
     const s1Mode = editDevice.s1Mode === 1 ? 1 : 0;
     const s2Mode = editDevice.s2Mode === 1 ? 1 : 0;
     const s3Mode = editDevice.s3Mode === 1 ? 1 : 0;
@@ -661,43 +598,61 @@ const SetDeviceDialog = ({ device, open, onClose }: SetDeviceDialogProps) => {
     const s1Delay = u8Byte(Number(editDevice.s1DelayTime));
     const s2Delay = u8Byte(Number(editDevice.s2DelayTime));
     const s3Delay = u8Byte(Number(editDevice.s3DelayTime));
-
     if (s1Delay === null || s2Delay === null || s3Delay === null) {
-      alert("지연시간은 0~255까지만 가능합니다.");
-      return;
+      return alert("지연시간은 0~255까지만 가능합니다.");
     }
 
-    // ✅ 2) data 조립 (너가 말한 순서 그대로)
-    // device IP(4) + subnet(4) + gateway(4) + server IP(4) + port(2)
-    // + ncno(s1,s2,s3)(3) + delayTime(s1,s2,s3)(3)
-    const data: number[] = [
-      ...deviceIp,
-      ...subnet,
-      ...gateway,
-      ...serverIp,
-      ...portBytes,
+    const s1Enable = editDevice.s1Enable;
+    const s2Enable = editDevice.s1Enable;
+    const s3Enable = editDevice.s1Enable;
+
+    const s1Status = 0;
+    const s2Status = 0;
+    const s3Status = 0;
+
+    // ✅ 30바이트 구성
+    const data30: number[] = [
+      ...deviceIp, // 4
+      ...subnet, // 4
+      ...gateway, // 4
+      ...serverIp, // 4
+      ...portBytes, // 2
       s1Mode,
       s2Mode,
-      s3Mode,
+      s3Mode, // 3
+      s1Enable,
+      s2Enable,
+      s3Enable, // 3
       s1Delay,
       s2Delay,
-      s3Delay,
+      s3Delay, // 3
+      s1Status,
+      s2Status,
+      s3Status, // 3
     ];
 
-    // ✅ 3) 전송 (CG_CMD + MAC + 0x0E + data)
     try {
-      const ok = await window.api.pm100.tool.udp.sendUdp({
-        macStr: editDevice.macStr,
-        cmd: 0x0e,
-        data,
-      });
-
-      if (!ok) {
-        alert("업데이트 UDP 전송 실패");
+      if (editDevice.type === "TCP") {
+        const ok = await window.api.pm100.tool.tcp.send({
+          deviceIpStr: deviceIpStr ?? "",
+          cmd: 0x1e,
+          data: data30,
+        });
+        1;
+        if (!ok) return alert("TCP 업데이트 전송 실패");
+        alert("TCP 업데이트 전송 완료");
+        setLocked(true);
         return;
       }
 
-      alert("업데이트 UDP 전송 완료");
+      // UDP 장치면 기존 UDP 0x0E
+      const ok = await window.api.pm100.tool.udp.sendUdp({
+        macStr: editDevice.macStr,
+        cmd: 0x0e,
+        data: data30,
+      });
+      if (!ok) return alert("UDP 업데이트 전송 실패");
+      alert("UDP 업데이트 전송 완료");
       setLocked(true);
     } catch (e: any) {
       alert(`업데이트 오류: ${e?.message ?? e}`);

@@ -76,6 +76,7 @@ const pm100ToolTcpApi = {
     electron.ipcRenderer.on("pm100:tool:tcp:raw", handler);
     return () => electron.ipcRenderer.removeListener("pm100:tool:tcp:raw", handler);
   },
+  send: (p) => electron.ipcRenderer.invoke("pm100:tcp:send", p),
   onDevice: (cb) => {
     const handler = (_evt, row) => cb(row);
     electron.ipcRenderer.on("pm100:tool:tcp:device", handler);

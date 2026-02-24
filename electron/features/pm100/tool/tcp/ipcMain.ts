@@ -62,6 +62,26 @@ export function registerPM100ToolTcpMainIPC(getWin: GetWin) {
     }
   });
 
+  ipcMain.handle(
+    "pm100:tcp:send",
+    async (
+      _evt,
+      args: { deviceIpStr: string; cmd: number; data?: number[] },
+    ) => {
+      try {
+        const ip = String(args?.deviceIpStr ?? "").trim();
+        const cmd = Number(args?.cmd) & 0xff;
+        const data = Array.isArray(args?.data) ? args.data : undefined;
+
+        const ok = await tcp.sendToDevice(ip, cmd, data);
+        return !!ok;
+      } catch (e: any) {
+        events.log(`tcp:send failed: ${String(e?.message ?? e)}`);
+        return false;
+      }
+    },
+  );
+
   ipcMain.handle("pm100:tool:tcp:getStatus", async () => {
     return tcp.getStatus();
   });

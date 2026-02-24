@@ -38,6 +38,10 @@ export type PM100DeviceInfo = {
   s2Mode: number;
   s3Mode: number;
 
+  s1Enable: number;
+  s2Enable: number;
+  s3Enable: number;
+
   s1DelayTime: number;
   s2DelayTime: number;
   s3DelayTime: number;
@@ -142,8 +146,8 @@ function formatIp(msg: Buffer, offset: number) {
 }
 
 export function parsePM100Response(msg: Buffer): PM100DeviceInfo | null {
-  // 총 길이 = 41
-  if (msg.length < 41) return null;
+  // 총 길이 = 47
+  if (msg.length < 47) return null;
 
   const tag = msg.slice(0, 6).toString("ascii");
   if (tag !== "CG_RES") return null;
@@ -154,44 +158,66 @@ export function parsePM100Response(msg: Buffer): PM100DeviceInfo | null {
   o += 6;
 
   const blockOffset = o;
-  const blockLen = 27;
+  let blockLen = 0;
 
   // block(27) 파싱
   const cmd = msg[o];
   o += 1;
+  blockLen += 1;
 
   const verMajor = msg[o];
   const verMinor = msg[o + 1];
   const version = `${verMajor}.${verMinor}`;
   o += 2;
+  blockLen += 2;
 
   const ip = formatIp(msg, o);
   o += 4;
+  blockLen += 4;
 
   const subnetMask = formatIp(msg, o);
   o += 4;
+  blockLen += 4;
 
   const gateway = formatIp(msg, o);
   o += 4;
+  blockLen += 4;
 
   const serverIp = formatIp(msg, o);
   o += 4;
+  blockLen += 4;
 
   // ✅ serverPort = 2 bytes (실데이터 기준)
   const serverPort = msg.readUInt16BE(o);
   o += 2;
+  blockLen += 2;
 
   // ncno(3) = s1,s2,s3 mode
   const s1Mode = msg[o];
   const s2Mode = msg[o + 1];
   const s3Mode = msg[o + 2];
   o += 3;
+  blockLen += 3;
+
+  const s1Enable = msg[o];
+  const s2Enable = msg[o + 1];
+  const s3Enable = msg[o + 2];
+  o += 3;
+  blockLen += 3;
 
   // delayTime(3) = s1,s2,s3 delay
   const s1DelayTime = msg[o];
   const s2DelayTime = msg[o + 1];
   const s3DelayTime = msg[o + 2];
   o += 3;
+  blockLen += 3;
+
+  // status
+  o += 3;
+  blockLen += 3;
+
+  o += 1;
+  blockLen += 1;
 
   // xorBlock(1), xorAll(1)
   const receivedXorBlock = msg[o];
@@ -222,6 +248,10 @@ export function parsePM100Response(msg: Buffer): PM100DeviceInfo | null {
     s1Mode,
     s2Mode,
     s3Mode,
+
+    s1Enable,
+    s2Enable,
+    s3Enable,
 
     s1DelayTime,
     s2DelayTime,
@@ -264,6 +294,10 @@ function toDeviceRow(info: PM100DeviceInfo, rawBytes: Uint8Array): DeviceRow {
     s1Mode: info.s1Mode,
     s2Mode: info.s2Mode,
     s3Mode: info.s3Mode,
+
+    s1Enable: info.s1Enable,
+    s2Enable: info.s2Enable,
+    s3Enable: info.s3Enable,
 
     s1DelayTime: info.s1DelayTime,
     s2DelayTime: info.s2DelayTime,
