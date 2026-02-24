@@ -7,9 +7,8 @@ export type TcpToolEvents = {
   log: (line: string) => void;
   status: (s: TcpToolStatus) => void;
   client: (p: { type: "connect" | "close"; remote: string }) => void;
-  raw: (p: { remote: string; length: number; hex: string }) => void; // ✅ TCP RX raw hex
-
-  device: (row: any) => void; // ✅ 추가: 파싱된 TCP 장치 row
+  raw: (p: { remote: string; length: number; hex: string }) => void;
+  device: (row: any) => void;
 };
 
 function toHexSpaced(buf: Buffer, maxBytes = 512) {
@@ -47,11 +46,8 @@ function ipToKey(ip: string) {
 
 function parseTcpFrame(frame: Buffer) {
   if (frame.length !== FRAME_LEN) return null;
-
-  // ✅ header 확인
   if (!frame.subarray(0, 5).equals(HDR)) return null;
 
-  // ✅ checksum 확인: 마지막 1바이트 = XOR(앞 35바이트)
   const received = frame[FRAME_LEN - 1];
   const calc = xorChecksum(frame.subarray(0, FRAME_LEN - 1));
   if (received !== calc) return null;
@@ -79,17 +75,12 @@ function parseTcpFrame(frame: Buffer) {
   const s2Status = frame[33];
   const s3Status = frame[34];
 
-  console.log("frame", frame); // debug
-  // ✅ DeviceRow 형태로 맞춰서 반환
   return {
     key: ipToKey(deviceIpStr),
     type: "TCP",
     isDetail: false,
     isEdit: false,
-
-    // TCP에서는 MAC이 없으니 식별용 문자열로 채움
-    // macStr: `TCP:${deviceIpStr}`,
-    macStr: ``,
+    macStr: "",
 
     deviceIpStr,
     subnetStr,
@@ -126,34 +117,33 @@ export function createPM100ToolTcpServer(events: TcpToolEvents) {
   let boundPort: number | undefined;
   let boundHost: string | undefined;
 
+  // ✅ 핵심: 현재 연결된 소켓을 추적해서 stop 때 전부 끊는다
+  const sockets = new Set<Socket>();
+
   function emitStatus() {
     events.status({ running, port: boundPort, host: boundHost });
   }
 
   async function startServer(port: number, host: string) {
-    // running이면 재시작은 ipcMain에서 처리하므로 여기선 그냥 start만
     if (running) return true;
 
     return await new Promise<boolean>((resolve) => {
       try {
         server = net.createServer((socket: Socket) => {
-          const remote = `${socket.remoteAddress}:${socket.remotePort}`;
+          sockets.add(socket);
 
+          const remote = `${socket.remoteAddress}:${socket.remotePort}`;
           events.client({ type: "connect", remote });
           events.log(`TCP client connected: ${remote}`);
 
-          socket.on("data", (chunk: Buffer) => {
-            const hex = toHexSpaced(chunk);
-            events.raw({ remote, length: chunk.length, hex });
-            events.log(`TCP RX ${remote} (${chunk.length} bytes)\n${hex}`);
-          });
-
           socket.on("close", () => {
+            sockets.delete(socket);
             events.client({ type: "close", remote });
             events.log(`TCP client closed: ${remote}`);
           });
 
           socket.on("error", (e) => {
+            sockets.delete(socket);
             events.log(
               `TCP socket error ${remote}: ${String((e as any)?.message ?? e)}`,
             );
@@ -161,43 +151,33 @@ export function createPM100ToolTcpServer(events: TcpToolEvents) {
 
           let rxBuf = Buffer.alloc(0);
 
+          // ✅ data 리스너는 하나만!
           socket.on("data", (chunk: Buffer) => {
-            // 1) raw 로그는 일단 그대로 (원하면 유지)
+            // 1) raw 로그
             const hex = toHexSpaced(chunk);
             events.raw({ remote, length: chunk.length, hex });
             events.log(`TCP RX ${remote} (${chunk.length} bytes)\n${hex}`);
 
-            // 2) 누적 버퍼에 붙이기
+            // 2) 누적 + 프레임 파싱
             rxBuf = Buffer.concat([rxBuf, chunk]);
 
-            // 3) 헤더 찾아서 프레임 단위로 파싱
             while (rxBuf.length >= 5) {
               const idx = rxBuf.indexOf(HDR);
               if (idx < 0) {
-                // 헤더가 없으면 너무 커지기 전에 일부 버림
+                // 헤더가 없으면 너무 커지기 전에 일부만 유지
                 if (rxBuf.length > 4096)
                   rxBuf = rxBuf.subarray(rxBuf.length - 4);
                 break;
               }
 
-              // 헤더 앞 쓰레기 버림
               if (idx > 0) rxBuf = rxBuf.subarray(idx);
-
-              // 프레임 길이 부족하면 다음 data 기다림
               if (rxBuf.length < FRAME_LEN) break;
 
               const frame = rxBuf.subarray(0, FRAME_LEN);
               rxBuf = rxBuf.subarray(FRAME_LEN);
 
               const row = parseTcpFrame(frame);
-              if (!row) {
-                // checksum 틀리거나 구조가 다르면 계속 탐색
-                continue;
-              }
-
-              // ✅ 여기서 "장치 IP가 목록에 없으면 추가, 있으면 업데이트"는
-              // renderer에서 setDevices로 처리하는게 제일 깔끔함.
-              events.device(row);
+              if (row) events.device(row);
             }
           });
         });
@@ -231,7 +211,18 @@ export function createPM100ToolTcpServer(events: TcpToolEvents) {
   }
 
   async function stopServer() {
+    // ✅ 1) 기존 연결을 먼저 전부 끊는다 (그래야 stop 후에도 RX 안 옴)
+    for (const sock of sockets) {
+      try {
+        sock.destroy();
+      } catch {}
+    }
+    sockets.clear();
+
+    // ✅ 2) 서버 accept 중단
     const s = server;
+    server = null;
+
     if (!s) {
       running = false;
       boundPort = undefined;
@@ -239,8 +230,6 @@ export function createPM100ToolTcpServer(events: TcpToolEvents) {
       emitStatus();
       return true;
     }
-
-    server = null;
 
     return await new Promise<boolean>((resolve) => {
       try {

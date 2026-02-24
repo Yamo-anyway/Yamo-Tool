@@ -1183,15 +1183,12 @@ function parseTcpFrame(frame) {
   const s1Status = frame[32];
   const s2Status = frame[33];
   const s3Status = frame[34];
-  console.log("frame", frame);
   return {
     key: ipToKey(deviceIpStr),
     type: "TCP",
     isDetail: false,
     isEdit: false,
-    // TCP에서는 MAC이 없으니 식별용 문자열로 채움
-    // macStr: `TCP:${deviceIpStr}`,
-    macStr: ``,
+    macStr: "",
     deviceIpStr,
     subnetStr,
     gatewayStr,
@@ -1221,6 +1218,7 @@ function createPM100ToolTcpServer(events) {
   let running = false;
   let boundPort;
   let boundHost;
+  const sockets = /* @__PURE__ */ new Set();
   function emitStatus() {
     events.status({ running, port: boundPort, host: boundHost });
   }
@@ -1229,20 +1227,17 @@ function createPM100ToolTcpServer(events) {
     return await new Promise((resolve) => {
       try {
         server2 = net.createServer((socket) => {
+          sockets.add(socket);
           const remote = `${socket.remoteAddress}:${socket.remotePort}`;
           events.client({ type: "connect", remote });
           events.log(`TCP client connected: ${remote}`);
-          socket.on("data", (chunk) => {
-            const hex = toHexSpaced(chunk);
-            events.raw({ remote, length: chunk.length, hex });
-            events.log(`TCP RX ${remote} (${chunk.length} bytes)
-${hex}`);
-          });
           socket.on("close", () => {
+            sockets.delete(socket);
             events.client({ type: "close", remote });
             events.log(`TCP client closed: ${remote}`);
           });
           socket.on("error", (e) => {
+            sockets.delete(socket);
             events.log(
               `TCP socket error ${remote}: ${String(e?.message ?? e)}`
             );
@@ -1266,10 +1261,7 @@ ${hex}`);
               const frame = rxBuf.subarray(0, FRAME_LEN);
               rxBuf = rxBuf.subarray(FRAME_LEN);
               const row = parseTcpFrame(frame);
-              if (!row) {
-                continue;
-              }
-              events.device(row);
+              if (row) events.device(row);
             }
           });
         });
@@ -1301,7 +1293,15 @@ ${hex}`);
     });
   }
   async function stopServer() {
+    for (const sock of sockets) {
+      try {
+        sock.destroy();
+      } catch {
+      }
+    }
+    sockets.clear();
     const s = server2;
+    server2 = null;
     if (!s) {
       running = false;
       boundPort = void 0;
@@ -1309,7 +1309,6 @@ ${hex}`);
       emitStatus();
       return true;
     }
-    server2 = null;
     return await new Promise((resolve) => {
       try {
         s.close((err) => {
