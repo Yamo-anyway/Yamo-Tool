@@ -56,6 +56,56 @@ export default function PM100Tool() {
 
   const [isOpenEdit, setIsOpenEdit] = useState<boolean>(false);
 
+  const [tcpServerPort, setTcpServerPort] = useState<number>(9002);
+
+  useEffect(() => {
+    setIsTcpServer(false);
+  }, []);
+
+  useEffect(() => {
+    const offTcpLog = window.api.pm100.tool.tcp.onLog((line) => {
+      setLog((p) =>
+        p ? p + `\n[${nowTs()}] ${line}` : `[${nowTs()}] ${line}`,
+      );
+    });
+    return () => offTcpLog?.();
+  }, []);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const st = await window.api.pm100.setup.getStatus();
+        setIsTcpServer(!!st?.running);
+        if (st?.port && !Number.isNaN(st.port)) setTcpServerPort(st.port);
+      } catch {}
+    })();
+  }, []);
+
+  useEffect(() => {
+    const offTcpDevice = window.api.pm100.tool.tcp.onDevice?.(
+      (row: DeviceRow) => {
+        setDevices((prev) => {
+          // ✅ 조건: "장치 IP가 목록 중 TCP type에서 없으면 추가"
+          const idx = prev.findIndex(
+            (d) => d.type === "TCP" && d.deviceIpStr === row.deviceIpStr,
+          );
+
+          if (idx >= 0) {
+            const next = [...prev];
+            // ✅ 있으면 나머지 정보 업데이트
+            next[idx] = { ...next[idx], ...row };
+            return next;
+          }
+          return [...prev, row];
+        });
+      },
+    );
+
+    return () => {
+      offTcpDevice?.();
+    };
+  }, []);
+
   // ✅ 로그 자동 스크롤
   useEffect(() => {
     if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight;
@@ -76,14 +126,19 @@ export default function PM100Tool() {
     });
 
     const offLog = window.api.pm100.tool.udp.onLog?.((line) => {
-      setLog((p) => (p ? p + "\n" + line : line));
+      setLog((p) =>
+        p ? p + `\n[${nowTs()}] ${line}` : `[${nowTs()}] ${line}`,
+      );
     });
 
     // ✅ 여기 추가
     const offStopped = window.api.pm100.tool.udp.onStopped?.((p: any) => {
       if (p.reason === "restart") return;
 
-      setLog((prev) => prev + `\n✅ 검색 완료: ${p.found}대 발견`);
+      setLog(
+        (prev) => prev + `\n[${nowTs()}] ✅ 검색 완료: ${p.found ?? 0}대 발견`,
+      );
+
       setIsUdpScanning(false);
 
       console.log("devices=>", devices);
@@ -96,6 +151,10 @@ export default function PM100Tool() {
     };
   }, []);
 
+  useEffect(() => {
+    console.log("isUdpScanning #5", isUdpScanning);
+  }, [isUdpScanning]);
+
   const onBack = async () => {
     try {
       // ✅ 나갈 때는 무조건 stop 시도
@@ -107,43 +166,143 @@ export default function PM100Tool() {
     window.location.hash = "#/";
   };
 
-  useEffect(() => {
-    console.log("isUdpScanning #5", isUdpScanning);
-  }, [isUdpScanning]);
+  function nowTs(): string {
+    const d = new Date();
 
-  // ✅ 최종: “검색/중단” 토글 (즉시 UI 반영 + 실패 시 원복 + 연타 방지)
+    const pad = (n: number, len = 2) => String(n).padStart(len, "0");
+
+    return (
+      pad(d.getHours()) +
+      ":" +
+      pad(d.getMinutes()) +
+      ":" +
+      pad(d.getSeconds()) +
+      "." +
+      pad(d.getMilliseconds(), 3)
+    );
+  }
+
   const onUdpScanStop = async () => {
-    if (isUdpScanning === false) {
-      console.log("isUdpScanning #1", isUdpScanning);
-      setIsUdpScanning(true);
-      setDevices([]);
+    try {
+      if (isUdpScanning === false) {
+        // ✅ UDP 검색 시작 누르면: TCP 동작중이면 종료 + 목록 초기화
+        if (isTcpServer) {
+          await window.api.pm100.tool.tcp.stopServer();
+          setIsTcpServer(false);
+        }
 
-      const ok = await window.api.pm100.tool.udp.scanStart({
-        port: 1500,
-        intervalMs: 2000,
-        count: 5,
-      });
+        setDevices([]); // ✅ 목록 초기화
+        setIsUdpScanning(true);
 
-      console.log("isUdpScanning #2", isUdpScanning);
-      if (!ok) {
-        // 실패면 원복
-        (console.log("isUdpScanning #3"), isUdpScanning);
-        scanningRef.current = false;
-        setIsUdpScanning(false);
+        const ok = await window.api.pm100.tool.udp.scanStart({
+          port: 1500,
+          intervalMs: 2000,
+          count: 5,
+        });
+
+        if (!ok) {
+          scanningRef.current = false;
+          setIsUdpScanning(false);
+        }
+        return;
       }
-    } else {
+
+      // ✅ UDP 중단
       await window.api.pm100.tool.udp.scanStop();
-      console.log("isUdpScanning #4", isUdpScanning);
+      setIsUdpScanning(false);
+    } catch (e: any) {
+      alert(`UDP 오류: ${e?.message ?? e}`);
       setIsUdpScanning(false);
     }
   };
 
+  async function getTcpBindHost(): Promise<string> {
+    const ips = await window.api.pm100.tool.tcp.getLocalIPv4s();
+    return ips?.[0] ?? "0.0.0.0";
+  }
+
   const onTcpServerStartStop = async () => {
-    setIsTcpServer((v) => !v);
     try {
-      // TODO
-    } catch {}
+      if (isTcpServer) {
+        // ✅ 서버 정지
+        const okStop = await window.api.pm100.tool.tcp.stopServer();
+        if (!okStop) return alert("TCP 서버 정지 실패");
+        setIsTcpServer(false);
+        return;
+      }
+
+      // ✅ TCP 서버 시작 누르면: UDP 검색 종료 + 목록 초기화
+      if (isUdpScanning) {
+        await window.api.pm100.tool.udp.scanStop();
+        setIsUdpScanning(false);
+      }
+
+      setDevices([]); // ✅ 목록 초기화
+
+      // ✅ 혹시 이미 running이면 안전 재시작
+      const st = await window.api.pm100.tool.tcp.getStatus();
+      if (st?.running) await window.api.pm100.tool.tcp.stopServer();
+
+      const host = await getTcpBindHost();
+      const ok = await window.api.pm100.tool.tcp.startServer(
+        tcpServerPort,
+        host,
+      );
+      if (!ok) return alert("TCP 서버 시작 실패");
+
+      setIsTcpServer(true);
+    } catch (e: any) {
+      alert(`TCP 오류: ${e?.message ?? e}`);
+    }
   };
+
+  // const onTcpServerStartStop = async () => {
+  //   try {
+  //     // ✅ 최신 상태 확인
+  //     const st = await window.api.pm100.setup.getStatus();
+  //     const running = !!st?.running;
+
+  //     if (isTcpServer) {
+  //       // ✅ "서버 정지" 버튼: stop만
+  //       const okStop = await window.api.pm100.setup.stopServer();
+  //       if (!okStop) {
+  //         alert("TCP 서버 정지 실패");
+  //         return;
+  //       }
+  //       setIsTcpServer(false); // ✅ Port 활성화
+  //       setLog((p) => (p ? p + `\n🛑 TCP 서버 정지` : `🛑 TCP 서버 정지`));
+  //       return;
+  //     }
+
+  //     // ✅ "서버 시작" 버튼: running이면 stop 후 start(재시작), 아니면 start
+  //     if (running) {
+  //       const okStop = await window.api.pm100.setup.stopServer();
+  //       if (!okStop) {
+  //         alert("TCP 서버 정지 실패(재시작 불가)");
+  //         return;
+  //       }
+  //     }
+
+  //     const host = await getTcpBindHost();
+  //     const okStart = await window.api.pm100.setup.startServer(
+  //       tcpServerPort,
+  //       host,
+  //     );
+  //     if (!okStart) {
+  //       alert("TCP 서버 시작 실패");
+  //       return;
+  //     }
+
+  //     setIsTcpServer(true); // ✅ Port 비활성화
+  //     setLog((p) =>
+  //       p
+  //         ? p + `\n✅ TCP 서버 시작: ${host}:${tcpServerPort}`
+  //         : `✅ TCP 서버 시작: ${host}:${tcpServerPort}`,
+  //     );
+  //   } catch (e: any) {
+  //     alert(`TCP 서버 오류: ${e?.message ?? e}`);
+  //   }
+  // };
 
   const selectDeviceRow = (row: DeviceRow) => {
     const newDevices = devices.map((el: DeviceRow) => {
@@ -211,11 +370,27 @@ export default function PM100Tool() {
             <Box sx={{ marginRight: "10px" }}>Server Port</Box>
           </div>
           <div>
-            <StyledButton
-              onClick={() => window.api.pm100.tool.log.openWindow()}
-            >
-              포트 값
-            </StyledButton>
+            <StyledInputPort
+              type="text"
+              inputMode="numeric"
+              value={tcpServerPort ?? 9002}
+              onChange={(e) => {
+                const onlyDigits = e.target.value.replace(/\D/g, "");
+
+                if (!onlyDigits) {
+                  setTcpServerPort(9002);
+                  return;
+                }
+
+                const num = Number(onlyDigits);
+
+                if (num >= 1 && num <= 65535) {
+                  setTcpServerPort(num);
+                }
+              }}
+              style={{ color: "white", width: "100px", marginRight: "10px" }}
+              disabled={isTcpServer}
+            />
           </div>
 
           <div>
@@ -301,8 +476,33 @@ export default function PM100Tool() {
 
               <TableBody>
                 {devices?.map((row: any) => {
+                  const isTcp = row.type === "TCP";
+
+                  const sCellStyle = (status: number) => {
+                    if (!isTcp) return {}; // ✅ UDP는 기존 스타일 유지
+                    return status === 0
+                      ? { backgroundColor: "#00c853", color: "#000" } // ✅ 초록 + 검정 글씨
+                      : { backgroundColor: "#ff8a80", color: "#000" }; // ✅ 연한 빨강 + 검정 글씨
+                  };
+
                   return (
-                    <TableRow key={`device list - ${row.key}`}>
+                    <TableRow
+                      key={`device list - ${row.key}`}
+                      sx={{
+                        transition:
+                          "background-color 120ms ease, transform 120ms ease, box-shadow 120ms ease",
+                        cursor: "pointer",
+                        "&:hover": {
+                          backgroundColor: "rgba(255,255,255,0.08)", // 은은한 하이라이트
+                          boxShadow: "0 6px 18px rgba(0,0,0,0.35)", // 살짝 띄운 느낌
+                          transform: "translateY(-1px)",
+                        },
+                        "&:active": {
+                          transform: "translateY(0px)",
+                          boxShadow: "0 3px 10px rgba(0,0,0,0.25)",
+                        },
+                      }}
+                    >
                       <StyledTableCell>{row.type}</StyledTableCell>
                       <StyledTableCell>{row.macStr}</StyledTableCell>
                       <StyledTableCell>{row.serverIpStr}</StyledTableCell>
@@ -310,6 +510,17 @@ export default function PM100Tool() {
                       <StyledTableCell>{row.deviceIpStr}</StyledTableCell>
                       <StyledTableCell>{row.subnetStr}</StyledTableCell>
                       <StyledTableCell>{row.gatewayStr}</StyledTableCell>
+
+                      <StyledTableCell sx={sCellStyle(row.s1Status)}>
+                        {`${row.s1Mode === 0 ? "NC" : "NO"} (${row.s1DelayTime}s)`}
+                      </StyledTableCell>
+                      <StyledTableCell sx={sCellStyle(row.s2Status)}>
+                        {`${row.s2Mode === 0 ? "NC" : "NO"} (${row.s2DelayTime}s)`}
+                      </StyledTableCell>
+                      <StyledTableCell sx={sCellStyle(row.s3Status)}>
+                        {`${row.s3Mode === 0 ? "NC" : "NO"} (${row.s3DelayTime}s)`}
+                      </StyledTableCell>
+                      {/*                       
                       <StyledTableCell>
                         {`${row.s1Mode === 0 ? "NC" : "NO"} (${row.s1DelayTime}s)`}
                       </StyledTableCell>
@@ -318,7 +529,7 @@ export default function PM100Tool() {
                       </StyledTableCell>
                       <StyledTableCell>
                         {`${row.s3Mode === 0 ? "NC" : "NO"} (${row.s3DelayTime}s)`}
-                      </StyledTableCell>
+                      </StyledTableCell> */}
                       <StyledTableCell
                         onClick={() => {
                           setIsOpenEdit(true);

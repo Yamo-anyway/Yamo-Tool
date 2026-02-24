@@ -8,6 +8,7 @@ import {
 } from "./features/pm100/setup/ipcMain";
 import { registerPM100ToolUdpMainIPC } from "./features/pm100/tool/udp/ipcMain";
 import { registerPM100ToolLogMainIPC } from "./features/pm100/tool/log/ipcMain";
+import { registerPM100ToolTcpMainIPC } from "./features/pm100/tool/tcp/ipcMain";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -45,6 +46,7 @@ app.whenReady().then(() => {
   registerPM100DiscoveryMainIPC(() => win);
   registerPM100SetupMainIPC(() => win);
   registerPM100ToolUdpMainIPC(() => win);
+  registerPM100ToolTcpMainIPC(() => win);
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

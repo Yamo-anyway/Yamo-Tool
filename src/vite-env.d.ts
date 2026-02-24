@@ -25,6 +25,29 @@ declare global {
           getConnectedIps: () => Promise<string[]>;
         };
         tool: {
+          tcp: {
+            startServer: (port: number, host: string) => Promise<boolean>;
+            stopServer: () => Promise<boolean>;
+            getStatus: () => Promise<{
+              running: boolean;
+              port?: number;
+              host?: string;
+            }>;
+            getLocalIPv4s: () => Promise<string[]>;
+            onLog: (cb: (line: string) => void) => () => void;
+            onStatus: (
+              cb: (s: {
+                running: boolean;
+                port?: number;
+                host?: string;
+              }) => void,
+            ) => () => void;
+            onRaw: (
+              cb: (p: { remote: string; length: number; hex: string }) => void,
+            ) => () => void;
+
+            onDevice: (cb: (row: DeviceRow) => void) => () => void;
+          };
           udp: {
             onDiscovered: (cb: (row: DeviceRow) => void) => Unsubscribe;
             onStopped: (cb: (reason: string) => void) => Unsubscribe;

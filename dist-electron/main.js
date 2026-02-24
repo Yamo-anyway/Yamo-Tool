@@ -53,7 +53,7 @@ const PM100_CHANNELS = {
 };
 const PM100_PORT$2 = 1500;
 const SEARCH_MASK = "255.255.255.0";
-function xorChecksum$2(buf) {
+function xorChecksum$3(buf) {
   let x = 0;
   for (const b of buf) x ^= b;
   return x & 255;
@@ -73,7 +73,7 @@ function buildDiscoveryPacket$1() {
     0,
     0
   ]);
-  const cs = xorChecksum$2(body);
+  const cs = xorChecksum$3(body);
   return Buffer.concat([body, Buffer.from([cs])]);
 }
 function ipToU32$2(ip2) {
@@ -302,14 +302,14 @@ function registerPM100DiscoveryMainIPC(getWin) {
   ipcMain.handle(PM100_CHANNELS.discovery.reset, resetHandler);
   ipcMain.handle(PM100_CHANNELS.legacy.discoveryReset, resetHandler);
 }
-const FRAME_LEN = 36;
+const FRAME_LEN$1 = 36;
 function ip(buf, off) {
   return `${buf[off]}.${buf[off + 1]}.${buf[off + 2]}.${buf[off + 3]}`;
 }
 function u16be(buf, off) {
   return buf[off] << 8 | buf[off + 1];
 }
-function xorChecksum$1(buf) {
+function xorChecksum$2(buf) {
   let x = 0;
   for (let i = 0; i < buf.length - 1; i++) x ^= buf[i];
   return x & 255;
@@ -317,7 +317,7 @@ function xorChecksum$1(buf) {
 function tryParseFrames(chunk) {
   const frames = [];
   let offset = 0;
-  while (offset + FRAME_LEN <= chunk.length) {
+  while (offset + FRAME_LEN$1 <= chunk.length) {
     if (chunk[offset] !== 67 || // 'C'
     chunk[offset + 1] !== 71 || // 'G'
     chunk[offset + 2] !== 68 || // 'D'
@@ -326,9 +326,9 @@ function tryParseFrames(chunk) {
       offset += 1;
       continue;
     }
-    const frameBuf = chunk.slice(offset, offset + FRAME_LEN);
-    const expected = frameBuf[FRAME_LEN - 1];
-    const actual = xorChecksum$1(frameBuf);
+    const frameBuf = chunk.slice(offset, offset + FRAME_LEN$1);
+    const expected = frameBuf[FRAME_LEN$1 - 1];
+    const actual = xorChecksum$2(frameBuf);
     if (expected !== actual) {
       offset += 1;
       continue;
@@ -370,7 +370,7 @@ function tryParseFrames(chunk) {
       sensorStatus,
       raw: frameBuf
     });
-    offset += FRAME_LEN;
+    offset += FRAME_LEN$1;
   }
   return { frames, rest: chunk.slice(offset) };
 }
@@ -515,7 +515,7 @@ class PM100SetupServer {
   }
 }
 let server = null;
-function getLocalIPv4s() {
+function getLocalIPv4s$1() {
   const nets = os.networkInterfaces();
   const ips = /* @__PURE__ */ new Set();
   for (const ifname of Object.keys(nets)) {
@@ -582,7 +582,7 @@ function registerPM100SetupMainIPC(getWin) {
   };
   ipcMain.handle(PM100_CHANNELS.setup.status, statusHandler);
   ipcMain.handle(PM100_CHANNELS.legacy.setupStatus, statusHandler);
-  const ipsHandler = () => getLocalIPv4s();
+  const ipsHandler = () => getLocalIPv4s$1();
   ipcMain.handle(PM100_CHANNELS.setup.getLocalIPv4s, ipsHandler);
   ipcMain.handle(PM100_CHANNELS.legacy.setupGetLocalIPv4s, ipsHandler);
   const connectedIpsHandler = () => server ? server.getConnectedIps() : [];
@@ -599,7 +599,7 @@ async function stopPM100SetupServer() {
   }
 }
 const PM100_PORT$1 = 1500;
-function xorChecksum(buf) {
+function xorChecksum$1(buf) {
   let x = 0;
   for (const b of buf) x ^= b;
   return x & 255;
@@ -621,7 +621,7 @@ function buildDiscoveryPacket() {
     0
     // MAC 6 bytes (0)
   ]);
-  const cs = xorChecksum(body);
+  const cs = xorChecksum$1(body);
   return Buffer.concat([body, Buffer.from([cs])]);
 }
 function ipToU32$1(ip2) {
@@ -699,8 +699,8 @@ function parsePM100Response(msg) {
   const receivedXorBlock = msg[o];
   const receivedXorAll = msg[o + 1];
   const block = msg.slice(blockOffset, blockOffset + blockLen);
-  const calcXorBlock = xorChecksum(block);
-  const calcXorAll = xorChecksum(msg.slice(0, msg.length - 1));
+  const calcXorBlock = xorChecksum$1(block);
+  const calcXorAll = xorChecksum$1(msg.slice(0, msg.length - 1));
   if (receivedXorBlock !== calcXorBlock) return null;
   if (receivedXorAll !== calcXorAll) return null;
   return {
@@ -1139,6 +1139,269 @@ function registerPM100ToolLogMainIPC(getMainWin, preloadPath) {
     return true;
   });
 }
+function toHexSpaced(buf, maxBytes = 512) {
+  const b = buf.length > maxBytes ? buf.slice(0, maxBytes) : buf;
+  const hex = b.toString("hex").toUpperCase();
+  const spaced = hex.match(/.{1,2}/g)?.join(" ") ?? "";
+  return buf.length > maxBytes ? spaced + ` ... (+${buf.length - maxBytes} bytes)` : spaced;
+}
+const HDR = Buffer.from([67, 71, 68, 73, 127]);
+const FRAME_LEN = 36;
+function xorChecksum(buf) {
+  let x = 0;
+  for (const b of buf) x ^= b;
+  return x & 255;
+}
+function formatIpBytes(b, off) {
+  return `${b[off]}.${b[off + 1]}.${b[off + 2]}.${b[off + 3]}`;
+}
+function ipToKey(ip2) {
+  const parts = ip2.split(".").map((n) => parseInt(n, 10));
+  const u = (parts[0] << 24 >>> 0 | parts[1] << 16 | parts[2] << 8 | parts[3]) >>> 0;
+  return u % 9e5 + 1e5;
+}
+function parseTcpFrame(frame) {
+  if (frame.length !== FRAME_LEN) return null;
+  if (!frame.subarray(0, 5).equals(HDR)) return null;
+  const received = frame[FRAME_LEN - 1];
+  const calc = xorChecksum(frame.subarray(0, FRAME_LEN - 1));
+  if (received !== calc) return null;
+  const deviceIpStr = formatIpBytes(frame, 5);
+  const subnetStr = formatIpBytes(frame, 9);
+  const gatewayStr = formatIpBytes(frame, 13);
+  const serverIpStr = formatIpBytes(frame, 17);
+  const serverPort = frame.readUInt16BE(21);
+  const s1Mode = frame[23];
+  const s2Mode = frame[24];
+  const s3Mode = frame[25];
+  const s1Enable = frame[26];
+  const s2Enable = frame[27];
+  const s3Enable = frame[28];
+  const s1DelayTime = frame[29];
+  const s2DelayTime = frame[30];
+  const s3DelayTime = frame[31];
+  const s1Status = frame[32];
+  const s2Status = frame[33];
+  const s3Status = frame[34];
+  console.log("frame", frame);
+  return {
+    key: ipToKey(deviceIpStr),
+    type: "TCP",
+    isDetail: false,
+    isEdit: false,
+    // TCP에서는 MAC이 없으니 식별용 문자열로 채움
+    // macStr: `TCP:${deviceIpStr}`,
+    macStr: ``,
+    deviceIpStr,
+    subnetStr,
+    gatewayStr,
+    serverIpStr,
+    serverPort,
+    s1Mode,
+    s2Mode,
+    s3Mode,
+    s1DelayTime,
+    s2DelayTime,
+    s3DelayTime,
+    s1Status,
+    s2Status,
+    s3Status,
+    raw: {
+      proto: "CGDI",
+      resp: 127,
+      enable: [s1Enable, s2Enable, s3Enable],
+      checksum: received,
+      calcChecksum: calc,
+      rawBytes: new Uint8Array(frame)
+    }
+  };
+}
+function createPM100ToolTcpServer(events) {
+  let server2 = null;
+  let running = false;
+  let boundPort;
+  let boundHost;
+  function emitStatus() {
+    events.status({ running, port: boundPort, host: boundHost });
+  }
+  async function startServer(port, host) {
+    if (running) return true;
+    return await new Promise((resolve) => {
+      try {
+        server2 = net.createServer((socket) => {
+          const remote = `${socket.remoteAddress}:${socket.remotePort}`;
+          events.client({ type: "connect", remote });
+          events.log(`TCP client connected: ${remote}`);
+          socket.on("data", (chunk) => {
+            const hex = toHexSpaced(chunk);
+            events.raw({ remote, length: chunk.length, hex });
+            events.log(`TCP RX ${remote} (${chunk.length} bytes)
+${hex}`);
+          });
+          socket.on("close", () => {
+            events.client({ type: "close", remote });
+            events.log(`TCP client closed: ${remote}`);
+          });
+          socket.on("error", (e) => {
+            events.log(
+              `TCP socket error ${remote}: ${String(e?.message ?? e)}`
+            );
+          });
+          let rxBuf = Buffer.alloc(0);
+          socket.on("data", (chunk) => {
+            const hex = toHexSpaced(chunk);
+            events.raw({ remote, length: chunk.length, hex });
+            events.log(`TCP RX ${remote} (${chunk.length} bytes)
+${hex}`);
+            rxBuf = Buffer.concat([rxBuf, chunk]);
+            while (rxBuf.length >= 5) {
+              const idx = rxBuf.indexOf(HDR);
+              if (idx < 0) {
+                if (rxBuf.length > 4096)
+                  rxBuf = rxBuf.subarray(rxBuf.length - 4);
+                break;
+              }
+              if (idx > 0) rxBuf = rxBuf.subarray(idx);
+              if (rxBuf.length < FRAME_LEN) break;
+              const frame = rxBuf.subarray(0, FRAME_LEN);
+              rxBuf = rxBuf.subarray(FRAME_LEN);
+              const row = parseTcpFrame(frame);
+              if (!row) {
+                continue;
+              }
+              events.device(row);
+            }
+          });
+        });
+        server2.on("error", (e) => {
+          events.log(`TCP server error: ${String(e?.message ?? e)}`);
+          try {
+            server2?.close();
+          } catch {
+          }
+          server2 = null;
+          running = false;
+          boundPort = void 0;
+          boundHost = void 0;
+          emitStatus();
+          resolve(false);
+        });
+        server2.listen(port, host, () => {
+          running = true;
+          boundPort = port;
+          boundHost = host;
+          events.log(`TCP server listening: ${host}:${port}`);
+          emitStatus();
+          resolve(true);
+        });
+      } catch (e) {
+        events.log(`TCP start failed: ${String(e?.message ?? e)}`);
+        resolve(false);
+      }
+    });
+  }
+  async function stopServer() {
+    const s = server2;
+    if (!s) {
+      running = false;
+      boundPort = void 0;
+      boundHost = void 0;
+      emitStatus();
+      return true;
+    }
+    server2 = null;
+    return await new Promise((resolve) => {
+      try {
+        s.close((err) => {
+          if (err) {
+            events.log(`TCP stop error: ${String(err?.message ?? err)}`);
+            resolve(false);
+            return;
+          }
+          running = false;
+          boundPort = void 0;
+          boundHost = void 0;
+          events.log(`TCP server stopped`);
+          emitStatus();
+          resolve(true);
+        });
+      } catch (e) {
+        events.log(`TCP stop failed: ${String(e?.message ?? e)}`);
+        resolve(false);
+      }
+    });
+  }
+  function getStatus() {
+    return { running, port: boundPort, host: boundHost };
+  }
+  return { startServer, stopServer, getStatus, isRunning: () => running };
+}
+function getLocalIPv4s() {
+  const nets = os.networkInterfaces();
+  const ips = [];
+  for (const ifname of Object.keys(nets)) {
+    for (const a of nets[ifname] || []) {
+      const isV4 = a.family === "IPv4" || a.family === 4;
+      if (!isV4) continue;
+      if (a.internal) continue;
+      ips.push(a.address);
+    }
+  }
+  return ips;
+}
+function registerPM100ToolTcpMainIPC(getWin) {
+  if (globalThis.__pm100_tool_tcp_ipc_registered) return;
+  globalThis.__pm100_tool_tcp_ipc_registered = true;
+  const events = {
+    log: (line) => {
+      const win2 = getWin();
+      if (!win2 || win2.isDestroyed()) return;
+      win2.webContents.send("pm100:tool:tcp:log", line);
+    },
+    status: (s) => {
+      const win2 = getWin();
+      if (!win2 || win2.isDestroyed()) return;
+      win2.webContents.send("pm100:tool:tcp:status", s);
+    },
+    client: (p) => {
+      const win2 = getWin();
+      if (!win2 || win2.isDestroyed()) return;
+      win2.webContents.send("pm100:tool:tcp:client", p);
+    },
+    raw: (p) => {
+      const win2 = getWin();
+      if (!win2 || win2.isDestroyed()) return;
+      win2.webContents.send("pm100:tool:tcp:raw", p);
+    },
+    device: (row) => {
+      const win2 = getWin();
+      if (!win2 || win2.isDestroyed()) return;
+      win2.webContents.send("pm100:tool:tcp:device", row);
+    }
+  };
+  const tcp = createPM100ToolTcpServer(events);
+  ipcMain.handle("pm100:tool:tcp:getLocalIPv4s", async () => {
+    try {
+      return getLocalIPv4s();
+    } catch {
+      return [];
+    }
+  });
+  ipcMain.handle("pm100:tool:tcp:getStatus", async () => {
+    return tcp.getStatus();
+  });
+  ipcMain.handle("pm100:tool:tcp:startServer", async (_evt, args) => {
+    const port = Number(args?.port);
+    const host = String(args?.host ?? "0.0.0.0");
+    if (tcp.isRunning()) {
+      await tcp.stopServer();
+    }
+    return await tcp.startServer(port, host);
+  });
+  ipcMain.handle("pm100:tool:tcp:stopServer", async () => {
+    return await tcp.stopServer();
+  });
+}
 const __filename$1 = fileURLToPath(import.meta.url);
 const __dirname$1 = path.dirname(__filename$1);
 let win = null;
@@ -1166,6 +1429,7 @@ app.whenReady().then(() => {
   registerPM100DiscoveryMainIPC(() => win);
   registerPM100SetupMainIPC(() => win);
   registerPM100ToolUdpMainIPC(() => win);
+  registerPM100ToolTcpMainIPC(() => win);
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
