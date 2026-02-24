@@ -33,6 +33,13 @@ declare global {
             scanStop: () => Promise<boolean>;
 
             onLog: (cb: (line: string) => void) => Unsubscribe;
+
+            sendUdp: (p: {
+              macStr: string;
+              deviceIp?: string;
+              cmd: number;
+              data?: number[];
+            }) => Promise<boolean>;
           };
           log: {
             openWindow: () => Promise<boolean>;

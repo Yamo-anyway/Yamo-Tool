@@ -69,17 +69,12 @@ electron.contextBridge.exposeInMainWorld("api", {
           electron.ipcRenderer.on("pm100:udp:discovered", handler);
           return () => electron.ipcRenderer.removeListener("pm100:udp:discovered", handler);
         },
-        // ✅ 수정: (_evt, reason) 형태로 받기
-        // onStopped: (cb: (reason: string) => void) => {
-        //   const handler = (_evt: any, reason: any) => cb(String(reason ?? ""));
-        //   ipcRenderer.on("pm100:udp:stopped", handler);
-        //   return () => ipcRenderer.removeListener("pm100:udp:stopped", handler);
-        // },
         onStopped: (cb) => {
           const handler = (_evt, p) => cb(p);
           electron.ipcRenderer.on("pm100:udp:stopped", handler);
           return () => electron.ipcRenderer.removeListener("pm100:udp:stopped", handler);
         },
+        sendUdp: (p) => electron.ipcRenderer.invoke("pm100:udp:sendUdp", p),
         onLog: (cb) => {
           const handler = (_evt, line) => cb(String(line ?? ""));
           electron.ipcRenderer.on("pm100:udp:log", handler);

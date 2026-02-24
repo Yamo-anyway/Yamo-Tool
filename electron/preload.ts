@@ -2,6 +2,13 @@ import { contextBridge, ipcRenderer } from "electron";
 import { pm100discoveryApi } from "./features/pm100/discovery/icpPreload";
 import { pm100setupApi } from "./features/pm100/setup/icpPreload";
 
+type SendUdpPayload = {
+  macStr: string; // "AA:BB:CC:DD:EE:FF"
+  deviceIp?: string; // 지금은 브로드캐스트면 안 써도 됨(옵션)
+  cmd: number; // 초기화=0x0F, 업데이트=0x0E ...
+  data?: number[]; // 초기화는 없음 -> 생략 or []
+};
+
 contextBridge.exposeInMainWorld("api", {
   pm100: {
     discovery: pm100discoveryApi,
@@ -23,18 +30,14 @@ contextBridge.exposeInMainWorld("api", {
             ipcRenderer.removeListener("pm100:udp:discovered", handler);
         },
 
-        // ✅ 수정: (_evt, reason) 형태로 받기
-        // onStopped: (cb: (reason: string) => void) => {
-        //   const handler = (_evt: any, reason: any) => cb(String(reason ?? ""));
-        //   ipcRenderer.on("pm100:udp:stopped", handler);
-        //   return () => ipcRenderer.removeListener("pm100:udp:stopped", handler);
-        // },
-
         onStopped: (cb: (p: { reason: string; found: number }) => void) => {
           const handler = (_evt: any, p: any) => cb(p);
           ipcRenderer.on("pm100:udp:stopped", handler);
           return () => ipcRenderer.removeListener("pm100:udp:stopped", handler);
         },
+
+        sendUdp: (p: SendUdpPayload) =>
+          ipcRenderer.invoke("pm100:udp:sendUdp", p),
 
         onLog: (cb: (line: string) => void) => {
           const handler = (_evt: any, line: any) => cb(String(line ?? ""));

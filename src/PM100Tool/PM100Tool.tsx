@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import "./styles.css";
 import {
   Box,
@@ -371,14 +371,148 @@ type SetDeviceDialogProps = {
 
 const SetDeviceDialog = ({ device, open, onClose }: SetDeviceDialogProps) => {
   const [editDevice, setEditDevice] = useState<DeviceRow | undefined>();
+  const [locked, setLocked] = useState(false);
 
   useEffect(() => {
     setEditDevice(device);
-    console.log(device);
+    setLocked(false);
   }, [device]);
 
-  const handleCommandInit = () => {};
-  const handleCommandSetConfig = () => {};
+  const handleCommandInit = async () => {
+    if (!editDevice) return;
+
+    const deviceIp = (editDevice.deviceIpStr ?? "").trim();
+
+    if (!deviceIp) {
+      alert("Device IP가 비어있습니다.");
+      return;
+    }
+
+    try {
+      // ✅ 새로 만든 API 호출
+      const ok = await window.api.pm100.tool.udp.sendUdp({
+        macStr: editDevice.macStr,
+        cmd: 0x0f,
+        // data: []  // 생략 가능
+      });
+
+      if (!ok) {
+        alert("초기화 UDP 전송 실패");
+        return;
+      }
+
+      alert("초기화 UDP 전송 완료");
+      setLocked(true);
+    } catch (e: any) {
+      alert(`초기화 오류: ${e?.message ?? e}`);
+    }
+  };
+
+  const handleCommandSetConfig = async () => {
+    if (!editDevice) return;
+
+    // ✅ 1) 입력값 검증
+    const deviceIp = parseIPv4ToBytes(editDevice.deviceIpStr);
+    if (!deviceIp) {
+      alert("Device IP 형식이 올바르지 않습니다. (예: 192.168.0.10)");
+      return;
+    }
+
+    const subnet = parseIPv4ToBytes(editDevice.subnetStr);
+    if (!subnet) {
+      alert("Subnet Mask 형식이 올바르지 않습니다. (예: 255.255.255.0)");
+      return;
+    }
+
+    const gateway = parseIPv4ToBytes(editDevice.gatewayStr);
+    if (!gateway) {
+      alert("Gateway 형식이 올바르지 않습니다.");
+      return;
+    }
+
+    const serverIp = parseIPv4ToBytes(editDevice.serverIpStr);
+    if (!serverIp) {
+      alert("Server IP 형식이 올바르지 않습니다.");
+      return;
+    }
+
+    const portBytes = u16beBytes(Number(editDevice.serverPort));
+    if (!portBytes) {
+      alert("Port 값이 올바르지 않습니다. (1~65535)");
+      return;
+    }
+
+    // mode: NC=0, NO=1 (이미 state가 0/1이라 가정)
+    const s1Mode = editDevice.s1Mode === 1 ? 1 : 0;
+    const s2Mode = editDevice.s2Mode === 1 ? 1 : 0;
+    const s3Mode = editDevice.s3Mode === 1 ? 1 : 0;
+
+    const s1Delay = u8Byte(Number(editDevice.s1DelayTime));
+    const s2Delay = u8Byte(Number(editDevice.s2DelayTime));
+    const s3Delay = u8Byte(Number(editDevice.s3DelayTime));
+
+    if (s1Delay === null || s2Delay === null || s3Delay === null) {
+      alert("지연시간은 0~255까지만 가능합니다.");
+      return;
+    }
+
+    // ✅ 2) data 조립 (너가 말한 순서 그대로)
+    // device IP(4) + subnet(4) + gateway(4) + server IP(4) + port(2)
+    // + ncno(s1,s2,s3)(3) + delayTime(s1,s2,s3)(3)
+    const data: number[] = [
+      ...deviceIp,
+      ...subnet,
+      ...gateway,
+      ...serverIp,
+      ...portBytes,
+      s1Mode,
+      s2Mode,
+      s3Mode,
+      s1Delay,
+      s2Delay,
+      s3Delay,
+    ];
+
+    // ✅ 3) 전송 (CG_CMD + MAC + 0x0E + data)
+    try {
+      const ok = await window.api.pm100.tool.udp.sendUdp({
+        macStr: editDevice.macStr,
+        cmd: 0x0e,
+        data,
+      });
+
+      if (!ok) {
+        alert("업데이트 UDP 전송 실패");
+        return;
+      }
+
+      alert("업데이트 UDP 전송 완료");
+      setLocked(true);
+    } catch (e: any) {
+      alert(`업데이트 오류: ${e?.message ?? e}`);
+    }
+  };
+
+  function parseIPv4ToBytes(ip: string): number[] | null {
+    const s = String(ip ?? "").trim();
+    if (!/^(\d{1,3}\.){3}\d{1,3}$/.test(s)) return null;
+    const parts = s.split(".").map((x) => Number(x));
+    if (parts.length !== 4) return null;
+    for (const n of parts) {
+      if (!Number.isInteger(n) || n < 0 || n > 255) return null;
+    }
+    return parts;
+  }
+
+  function u16beBytes(n: number): number[] | null {
+    if (!Number.isInteger(n) || n < 1 || n > 65535) return null;
+    return [(n >> 8) & 0xff, n & 0xff];
+  }
+
+  function u8Byte(n: number): number | null {
+    if (!Number.isInteger(n) || n < 0 || n > 255) return null;
+    return n & 0xff;
+  }
 
   return (
     <Dialog
@@ -412,10 +546,13 @@ const SetDeviceDialog = ({ device, open, onClose }: SetDeviceDialogProps) => {
             장치 설정
           </div>
           <div>
-            <StyledDialogButton onClick={handleCommandInit}>
+            <StyledDialogButton onClick={handleCommandInit} disabled={locked}>
               초기화
             </StyledDialogButton>
-            <StyledDialogButton onClick={handleCommandSetConfig}>
+            <StyledDialogButton
+              onClick={handleCommandSetConfig}
+              disabled={locked}
+            >
               업데이트
             </StyledDialogButton>
             <StyledDialogButton onClick={onClose}>닫기</StyledDialogButton>
@@ -474,6 +611,7 @@ const SetDeviceDialog = ({ device, open, onClose }: SetDeviceDialogProps) => {
                       );
                     }
                   }}
+                  disabled={locked}
                 />
               </div>
               <div
@@ -507,6 +645,7 @@ const SetDeviceDialog = ({ device, open, onClose }: SetDeviceDialogProps) => {
                       );
                     }
                   }}
+                  disabled={locked}
                 />
               </div>
             </div>
@@ -562,6 +701,7 @@ const SetDeviceDialog = ({ device, open, onClose }: SetDeviceDialogProps) => {
                         );
                       }
                     }}
+                    disabled={locked}
                   />
                 </div>
                 <div
@@ -608,6 +748,7 @@ const SetDeviceDialog = ({ device, open, onClose }: SetDeviceDialogProps) => {
                         );
                       }
                     }}
+                    disabled={locked}
                   />
                 </div>
                 <div
@@ -654,6 +795,7 @@ const SetDeviceDialog = ({ device, open, onClose }: SetDeviceDialogProps) => {
                         );
                       }
                     }}
+                    disabled={locked}
                   />
                 </div>
               </div>
@@ -673,6 +815,7 @@ const SetDeviceDialog = ({ device, open, onClose }: SetDeviceDialogProps) => {
                       prev ? { ...prev, s1Mode: 0 } : prev,
                     );
                   }}
+                  disabled={locked}
                 />
                 Nc
               </div>
@@ -684,12 +827,24 @@ const SetDeviceDialog = ({ device, open, onClose }: SetDeviceDialogProps) => {
                       prev ? { ...prev, s1Mode: 1 } : prev,
                     );
                   }}
+                  disabled={locked}
                 />
                 No
               </div>
               <div style={{ marginRight: "20px" }}>지연시간</div>
               <div style={{ marginRight: "5px" }}>
-                <StyledInputDelayTime value={editDevice?.s1DelayTime} />
+                <StyledInputDelayTime
+                  value={editDevice?.s1DelayTime ?? 0}
+                  onChange={(e) => {
+                    const only = e.target.value.replace(/\D/g, "");
+                    const n = only === "" ? 0 : Number(only);
+                    if (n < 0 || n > 255) return;
+                    setEditDevice((prev) =>
+                      prev ? { ...prev, s1DelayTime: n } : prev,
+                    );
+                  }}
+                  disabled={locked}
+                />
               </div>
               <div style={{ marginRight: "20px" }}> s</div>
             </div>
@@ -708,6 +863,7 @@ const SetDeviceDialog = ({ device, open, onClose }: SetDeviceDialogProps) => {
                       prev ? { ...prev, s2Mode: 0 } : prev,
                     );
                   }}
+                  disabled={locked}
                 />
                 Nc
               </div>
@@ -719,12 +875,24 @@ const SetDeviceDialog = ({ device, open, onClose }: SetDeviceDialogProps) => {
                       prev ? { ...prev, s2Mode: 1 } : prev,
                     );
                   }}
+                  disabled={locked}
                 />
                 No
               </div>
               <div style={{ marginRight: "20px" }}>지연시간</div>
               <div style={{ marginRight: "5px" }}>
-                <StyledInputDelayTime value={editDevice?.s2DelayTime} />
+                <StyledInputDelayTime
+                  value={editDevice?.s2DelayTime ?? 0}
+                  onChange={(e) => {
+                    const only = e.target.value.replace(/\D/g, "");
+                    const n = only === "" ? 0 : Number(only);
+                    if (n < 0 || n > 255) return;
+                    setEditDevice((prev) =>
+                      prev ? { ...prev, s2DelayTime: n } : prev,
+                    );
+                  }}
+                  disabled={locked}
+                />
               </div>
               <div style={{ marginRight: "20px" }}> s</div>
             </div>
@@ -743,6 +911,7 @@ const SetDeviceDialog = ({ device, open, onClose }: SetDeviceDialogProps) => {
                       prev ? { ...prev, s3Mode: 0 } : prev,
                     );
                   }}
+                  disabled={locked}
                 />
                 Nc
               </div>
@@ -754,12 +923,24 @@ const SetDeviceDialog = ({ device, open, onClose }: SetDeviceDialogProps) => {
                       prev ? { ...prev, s3Mode: 1 } : prev,
                     );
                   }}
+                  disabled={locked}
                 />
                 No
               </div>
               <div style={{ marginRight: "20px" }}>지연시간</div>
               <div style={{ marginRight: "5px" }}>
-                <StyledInputDelayTime value={editDevice?.s3DelayTime} />
+                <StyledInputDelayTime
+                  value={editDevice?.s3DelayTime ?? 0}
+                  onChange={(e) => {
+                    const only = e.target.value.replace(/\D/g, "");
+                    const n = only === "" ? 0 : Number(only);
+                    if (n < 0 || n > 255) return;
+                    setEditDevice((prev) =>
+                      prev ? { ...prev, s3DelayTime: n } : prev,
+                    );
+                  }}
+                  disabled={locked}
+                />
               </div>
               <div style={{ marginRight: "20px" }}> s</div>
             </div>

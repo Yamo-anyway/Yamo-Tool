@@ -51,7 +51,7 @@ const PM100_CHANNELS = {
     setupGetConnectedIps: "pm100setup:getConnectedIps"
   }
 };
-const PM100_PORT$1 = 1500;
+const PM100_PORT$2 = 1500;
 const SEARCH_MASK = "255.255.255.0";
 function xorChecksum$2(buf) {
   let x = 0;
@@ -76,24 +76,24 @@ function buildDiscoveryPacket$1() {
   const cs = xorChecksum$2(body);
   return Buffer.concat([body, Buffer.from([cs])]);
 }
-function ipToU32$1(ip2) {
+function ipToU32$2(ip2) {
   const [a, b, c, d] = ip2.split(".").map((x) => parseInt(x, 10));
   return (a << 24 >>> 0 | b << 16 | c << 8 | d) >>> 0;
 }
-function u32ToIp$1(u) {
+function u32ToIp$2(u) {
   const a = u >>> 24 & 255;
   const b = u >>> 16 & 255;
   const c = u >>> 8 & 255;
   const d = u & 255;
   return `${a}.${b}.${c}.${d}`;
 }
-function broadcastByMask$1(ip2, mask) {
-  const ipU = ipToU32$1(ip2);
-  const maskU = ipToU32$1(mask);
+function broadcastByMask$2(ip2, mask) {
+  const ipU = ipToU32$2(ip2);
+  const maskU = ipToU32$2(mask);
   const bcast = (ipU | ~maskU >>> 0) >>> 0;
-  return u32ToIp$1(bcast);
+  return u32ToIp$2(bcast);
 }
-function getBroadcastTargets$1(mask) {
+function getBroadcastTargets$2(mask) {
   const nets = os.networkInterfaces();
   const targets = /* @__PURE__ */ new Set();
   for (const ifname of Object.keys(nets)) {
@@ -101,7 +101,7 @@ function getBroadcastTargets$1(mask) {
       const isV4 = a.family === "IPv4" || a.family === 4;
       if (!isV4) continue;
       if (a.internal) continue;
-      targets.add(broadcastByMask$1(a.address, mask));
+      targets.add(broadcastByMask$2(a.address, mask));
     }
   }
   if (targets.size === 0) targets.add("255.255.255.255");
@@ -163,13 +163,13 @@ class PM100Scanner {
         });
       }
     });
-    socket.bind(PM100_PORT$1, () => {
+    socket.bind(PM100_PORT$2, () => {
       const packet = buildDiscoveryPacket$1();
       socket.setBroadcast(true);
       socket.setRecvBufferSize(1024 * 1024);
-      const targets = getBroadcastTargets$1(SEARCH_MASK);
+      const targets = getBroadcastTargets$2(SEARCH_MASK);
       this.onLog(
-        `Scan start: port=${PM100_PORT$1}, mask=${SEARCH_MASK}, targets=${targets.join(", ")}`
+        `Scan start: port=${PM100_PORT$2}, mask=${SEARCH_MASK}, targets=${targets.join(", ")}`
       );
       this.onLog(
         `Send ${packet.length} bytes: ${packet.toString("hex").match(/.{1,2}/g)?.join(" ")}`
@@ -177,10 +177,10 @@ class PM100Scanner {
       const sendOnce = () => {
         const packet2 = buildDiscoveryPacket$1();
         for (const host of targets) {
-          socket.send(packet2, PM100_PORT$1, host, (err) => {
+          socket.send(packet2, PM100_PORT$2, host, (err) => {
             if (err)
-              this.onLog(`Send fail -> ${host}:${PM100_PORT$1} : ${err.message}`);
-            else this.onLog(`Sent -> ${host}:${PM100_PORT$1}`);
+              this.onLog(`Send fail -> ${host}:${PM100_PORT$2} : ${err.message}`);
+            else this.onLog(`Sent -> ${host}:${PM100_PORT$2}`);
           });
         }
       };
@@ -220,16 +220,16 @@ class PM100Scanner {
   sendReset(deviceIp, mac) {
     const socket = this.ensureCmdSocket();
     const packet = buildResetPacket(mac);
-    const bcast = broadcastByMask$1(deviceIp, SEARCH_MASK);
+    const bcast = broadcastByMask$2(deviceIp, SEARCH_MASK);
     this.onLog(
-      `Reset TX (broadcast) -> ${bcast}:${PM100_PORT$1} (${packet.length} bytes)`
+      `Reset TX (broadcast) -> ${bcast}:${PM100_PORT$2} (${packet.length} bytes)`
     );
-    socket.send(packet, PM100_PORT$1, bcast, (err) => {
+    socket.send(packet, PM100_PORT$2, bcast, (err) => {
       if (err)
         this.onLog(
-          `Reset send fail -> ${bcast}:${PM100_PORT$1} : ${err.message}`
+          `Reset send fail -> ${bcast}:${PM100_PORT$2} : ${err.message}`
         );
-      else this.onLog(`Reset sent -> ${bcast}:${PM100_PORT$1}`);
+      else this.onLog(`Reset sent -> ${bcast}:${PM100_PORT$2}`);
     });
   }
   ensureCmdSocket() {
@@ -243,9 +243,9 @@ class PM100Scanner {
       }
       if (this.cmdSocket === s) this.cmdSocket = null;
     });
-    s.bind(PM100_PORT$1, "0.0.0.0", () => {
+    s.bind(PM100_PORT$2, "0.0.0.0", () => {
       s.setBroadcast(true);
-      this.onLog(`CMD socket ready on 0.0.0.0:${PM100_PORT$1}`);
+      this.onLog(`CMD socket ready on 0.0.0.0:${PM100_PORT$2}`);
     });
     this.cmdSocket = s;
     return s;
@@ -598,7 +598,7 @@ async function stopPM100SetupServer() {
     server = null;
   }
 }
-const PM100_PORT = 1500;
+const PM100_PORT$1 = 1500;
 function xorChecksum(buf) {
   let x = 0;
   for (const b of buf) x ^= b;
@@ -624,24 +624,24 @@ function buildDiscoveryPacket() {
   const cs = xorChecksum(body);
   return Buffer.concat([body, Buffer.from([cs])]);
 }
-function ipToU32(ip2) {
+function ipToU32$1(ip2) {
   const [a, b, c, d] = ip2.split(".").map((x) => parseInt(x, 10));
   return (a << 24 >>> 0 | b << 16 | c << 8 | d) >>> 0;
 }
-function u32ToIp(u) {
+function u32ToIp$1(u) {
   const a = u >>> 24 & 255;
   const b = u >>> 16 & 255;
   const c = u >>> 8 & 255;
   const d = u & 255;
   return `${a}.${b}.${c}.${d}`;
 }
-function broadcastByMask(ip2, mask) {
-  const ipU = ipToU32(ip2);
-  const maskU = ipToU32(mask);
+function broadcastByMask$1(ip2, mask) {
+  const ipU = ipToU32$1(ip2);
+  const maskU = ipToU32$1(mask);
   const bcast = (ipU | ~maskU >>> 0) >>> 0;
-  return u32ToIp(bcast);
+  return u32ToIp$1(bcast);
 }
-function getBroadcastTargets() {
+function getBroadcastTargets$1() {
   const nets = os.networkInterfaces();
   const targets = /* @__PURE__ */ new Set();
   for (const ifname of Object.keys(nets)) {
@@ -651,7 +651,7 @@ function getBroadcastTargets() {
       if (a.internal) continue;
       const mask = a.netmask;
       if (!mask) continue;
-      targets.add(broadcastByMask(a.address, mask));
+      targets.add(broadcastByMask$1(a.address, mask));
     }
   }
   if (targets.size === 0) targets.add("255.255.255.255");
@@ -764,7 +764,7 @@ function createPM100UdpScanner(events) {
   let running = false;
   const deviceMap = /* @__PURE__ */ new Map();
   const defaults = {
-    port: PM100_PORT,
+    port: PM100_PORT$1,
     intervalMs: 2e3,
     count: 5
   };
@@ -837,14 +837,14 @@ function createPM100UdpScanner(events) {
         reject(e);
       }
     });
-    const targets = getBroadcastTargets();
+    const targets = getBroadcastTargets$1();
     const sendOnce = () => {
       if (!socket || !running) return;
       const packet = buildDiscoveryPacket();
       for (const host of targets) {
-        socket.send(packet, PM100_PORT, host, (err) => {
+        socket.send(packet, PM100_PORT$1, host, (err) => {
           if (err) {
-            events.log(`Send fail -> ${host}:${PM100_PORT} : ${err.message}`);
+            events.log(`Send fail -> ${host}:${PM100_PORT$1} : ${err.message}`);
           }
         });
       }
@@ -865,6 +865,88 @@ function createPM100UdpScanner(events) {
     cleanup(reason ?? "manual stop");
   }
   return { start, stop, isRunning: () => running };
+}
+const PM100_PORT = 1500;
+function ipToU32(ip2) {
+  const [a, b, c, d] = ip2.split(".").map((x) => parseInt(x, 10));
+  return (a << 24 >>> 0 | b << 16 | c << 8 | d) >>> 0;
+}
+function u32ToIp(u) {
+  const a = u >>> 24 & 255;
+  const b = u >>> 16 & 255;
+  const c = u >>> 8 & 255;
+  const d = u & 255;
+  return `${a}.${b}.${c}.${d}`;
+}
+function broadcastByMask(ip2, mask) {
+  const ipU = ipToU32(ip2);
+  const maskU = ipToU32(mask);
+  const bcast = (ipU | ~maskU >>> 0) >>> 0;
+  return u32ToIp(bcast);
+}
+function getBroadcastTargets() {
+  const nets = os.networkInterfaces();
+  const targets = /* @__PURE__ */ new Set();
+  for (const ifname of Object.keys(nets)) {
+    for (const a of nets[ifname] || []) {
+      const isV4 = a.family === "IPv4" || a.family === 4;
+      if (!isV4) continue;
+      if (a.internal) continue;
+      const mask = a.netmask;
+      if (!mask) continue;
+      targets.add(broadcastByMask(a.address, mask));
+    }
+  }
+  if (targets.size === 0) targets.add("255.255.255.255");
+  return Array.from(targets);
+}
+function macStrToBytes(macStr) {
+  if (!macStr || typeof macStr !== "string") throw new Error("macStr missing");
+  const hex = macStr.replace(/[^0-9a-fA-F]/g, "");
+  if (hex.length !== 12) throw new Error(`Invalid MAC: ${macStr}`);
+  const out = Buffer.alloc(6);
+  for (let i = 0; i < 6; i++) {
+    out[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16) & 255;
+  }
+  return out;
+}
+function buildCgCmdPacket(p) {
+  const tag = Buffer.from("CG_CMD", "ascii");
+  const mac = macStrToBytes(p.macStr);
+  const cmd = Buffer.from([Number(p.cmd) & 255]);
+  const data = Buffer.from(p.data ?? []);
+  return Buffer.concat([tag, mac, cmd, data]);
+}
+async function sendBroadcast(packet, port = PM100_PORT) {
+  const targets = getBroadcastTargets();
+  return await new Promise((resolve) => {
+    const sock = dgram.createSocket({ type: "udp4", reuseAddr: true });
+    const finish = (ok) => {
+      try {
+        sock.removeAllListeners();
+        sock.close();
+      } catch {
+      }
+      resolve(ok);
+    };
+    sock.on("error", () => finish(false));
+    sock.bind(0, () => {
+      try {
+        sock.setBroadcast(true);
+      } catch {
+      }
+      let pending = targets.length;
+      let anyOk = false;
+      console.log("packet", packet);
+      for (const host of targets) {
+        sock.send(packet, port, host, (err) => {
+          if (!err) anyOk = true;
+          pending -= 1;
+          if (pending <= 0) finish(anyOk);
+        });
+      }
+    });
+  });
 }
 function registerPM100ToolUdpMainIPC(getWin) {
   if (globalThis.__pm100_tool_udp_ipc_registered) return;
@@ -914,6 +996,20 @@ function registerPM100ToolUdpMainIPC(getWin) {
       return true;
     } catch (e) {
       events.log(`scanStop failed: ${String(e?.message || e)}`);
+      return false;
+    }
+  });
+  ipcMain.handle("pm100:udp:sendUdp", async (_evt, args) => {
+    try {
+      const packet = buildCgCmdPacket({
+        macStr: args?.macStr,
+        cmd: args?.cmd,
+        data: args?.data
+      });
+      const ok = await sendBroadcast(packet, PM100_PORT);
+      return ok;
+    } catch (e) {
+      console.error("pm100:udp:sendUdp error:", e, "args=", args);
       return false;
     }
   });
