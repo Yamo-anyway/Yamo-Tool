@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import "./styles.css";
 import {
   Box,
   Button,
@@ -77,7 +76,7 @@ export default function PM100Tool() {
   useEffect(() => {
     (async () => {
       try {
-        const st = await window.api.pm100.setup.getStatus();
+        const st = await window.api.pm100.tool.tcp.getStatus();
         setIsTcpServer(!!st?.running);
         if (st?.port && !Number.isNaN(st.port)) setTcpServerPort(st.port);
       } catch {}
@@ -411,30 +410,54 @@ export default function PM100Tool() {
                   </StyledTableHeadCell>
                   <StyledTableHeadCell
                     colSpan={2}
-                    sx={{ width: 150, minWidth: 80, maxWidth: 80 }}
+                    sx={{ width: 140, minWidth: 140, maxWidth: 140 }}
                   >
                     S1
                   </StyledTableHeadCell>
                   <StyledTableHeadCell
                     colSpan={2}
-                    sx={{ width: 150, minWidth: 80, maxWidth: 80 }}
+                    sx={{ width: 140, minWidth: 140, maxWidth: 140 }}
                   >
                     S2
                   </StyledTableHeadCell>
                   <StyledTableHeadCell
                     colSpan={2}
-                    sx={{ width: 150, minWidth: 80, maxWidth: 80 }}
+                    sx={{ width: 140, minWidth: 140, maxWidth: 140 }}
                   >
                     S3
                   </StyledTableHeadCell>
                 </TableRow>
                 <TableRow>
-                  <StyledTableHeadCell>NC/NO</StyledTableHeadCell>
-                  <StyledTableHeadCell>DelayTime</StyledTableHeadCell>
-                  <StyledTableHeadCell>NC/NO</StyledTableHeadCell>
-                  <StyledTableHeadCell>DelayTime</StyledTableHeadCell>
-                  <StyledTableHeadCell>NC/NO</StyledTableHeadCell>
-                  <StyledTableHeadCell>DelayTime</StyledTableHeadCell>
+                  <StyledTableHeadCell
+                    sx={{ width: 70, minWidth: 70, maxWidth: 70 }}
+                  >
+                    NC/NO
+                  </StyledTableHeadCell>
+                  <StyledTableHeadCell
+                    sx={{ width: 70, minWidth: 70, maxWidth: 70 }}
+                  >
+                    DelayTime
+                  </StyledTableHeadCell>
+                  <StyledTableHeadCell
+                    sx={{ width: 70, minWidth: 70, maxWidth: 70 }}
+                  >
+                    NC/NO
+                  </StyledTableHeadCell>
+                  <StyledTableHeadCell
+                    sx={{ width: 70, minWidth: 70, maxWidth: 70 }}
+                  >
+                    DelayTime
+                  </StyledTableHeadCell>
+                  <StyledTableHeadCell
+                    sx={{ width: 70, minWidth: 70, maxWidth: 70 }}
+                  >
+                    NC/NO
+                  </StyledTableHeadCell>
+                  <StyledTableHeadCell
+                    sx={{ width: 70, minWidth: 70, maxWidth: 70 }}
+                  >
+                    DelayTime
+                  </StyledTableHeadCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -507,7 +530,7 @@ export default function PM100Tool() {
               value={log}
               readOnly
               placeholder="Logs..."
-              style={{ height: "100%" }}
+              style={{ width: "100%", height: "100%" }}
             />
           </div>
         </div>

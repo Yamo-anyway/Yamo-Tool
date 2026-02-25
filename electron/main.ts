@@ -1,13 +1,7 @@
 import { app, BrowserWindow } from "electron";
 import path from "path";
 import { fileURLToPath } from "url";
-import { registerPM100DiscoveryMainIPC } from "./features/pm100/discovery/ipcMain";
-import {
-  registerPM100SetupMainIPC,
-  stopPM100SetupServer,
-} from "./features/pm100/setup/ipcMain";
 import { registerPM100ToolUdpMainIPC } from "./features/pm100/tool/udp/ipcMain";
-import { registerPM100ToolLogMainIPC } from "./features/pm100/tool/log/ipcMain";
 import { registerPM100ToolTcpMainIPC } from "./features/pm100/tool/tcp/ipcMain";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -16,8 +10,6 @@ const __dirname = path.dirname(__filename);
 let win: BrowserWindow | null = null;
 
 function createWindow() {
-  const preloadPath = path.join(__dirname, "preload.mjs");
-
   win = new BrowserWindow({
     width: 1140,
     height: 800,
@@ -33,8 +25,6 @@ function createWindow() {
     win = null;
   });
 
-  registerPM100ToolLogMainIPC(() => win, preloadPath);
-
   const devUrl = process.env.VITE_DEV_SERVER_URL;
   if (devUrl) win.loadURL(devUrl);
   else win.loadFile(path.join(process.cwd(), "index.html"));
@@ -43,20 +33,12 @@ function createWindow() {
 app.whenReady().then(() => {
   createWindow();
 
-  registerPM100DiscoveryMainIPC(() => win);
-  registerPM100SetupMainIPC(() => win);
   registerPM100ToolUdpMainIPC(() => win);
   registerPM100ToolTcpMainIPC(() => win);
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
-});
-
-// ✅ 종료는 여기서 한 번만 책임지고 정리
-app.on("window-all-closed", async () => {
-  await stopPM100SetupServer();
-  if (process.platform !== "darwin") app.quit();
 });
 
 process.on("uncaughtException", (err) => {

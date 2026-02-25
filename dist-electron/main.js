@@ -4,600 +4,6 @@ import { fileURLToPath } from "url";
 import os from "os";
 import dgram from "dgram";
 import net from "net";
-const PM100_CHANNELS = {
-  discovery: {
-    scanStart: "pm100:discovery:scanStart",
-    scanStop: "pm100:discovery:scanStop",
-    log: "pm100:discovery:log",
-    udp: "pm100:discovery:udp",
-    reset: "pm100:discovery:reset"
-  },
-  setup: {
-    start: "pm100:setup:start",
-    stop: "pm100:setup:stop",
-    status: "pm100:setup:status",
-    log: "pm100:setup:log",
-    getLocalIPv4s: "pm100:setup:getLocalIPv4s",
-    device: "pm100:setup:device",
-    getConnectedIps: "pm100:setup:getConnectedIps"
-  },
-  tool: {
-    log: {
-      openWindow: "pm100tool:log:openWindow",
-      append: "pm100tool:log:append",
-      clear: "pm100tool:log:clear",
-      getAll: "pm100tool:log:getAll",
-      updated: "pm100tool:log:updated"
-    }
-  },
-  /**
-   * Backward-compatible aliases (temporary).
-   * Remove after you migrate renderer + ipcMain handlers.
-   */
-  legacy: {
-    // discovery
-    discoveryScanStart: "pm100discovery:scanStart",
-    discoveryScanStop: "pm100discovery:scanStop",
-    discoveryLog: "pm100discovery:log",
-    discoveryUdp: "pm100discovery:udp",
-    discoveryReset: "pm100discovery:reset",
-    // setup
-    setupStart: "pm100setup:start",
-    setupStop: "pm100setup:stop",
-    setupStatus: "pm100setup:status",
-    setupLog: "pm100setup:log",
-    setupGetLocalIPv4s: "pm100setup:getLocalIPv4s",
-    setupDevice: "pm100setup:device",
-    setupGetConnectedIps: "pm100setup:getConnectedIps"
-  }
-};
-const PM100_PORT$2 = 1500;
-const SEARCH_MASK = "255.255.255.0";
-function xorChecksum$3(buf) {
-  let x = 0;
-  for (const b of buf) x ^= b;
-  return x & 255;
-}
-function buildDiscoveryPacket$1() {
-  const body = Buffer.from([
-    67,
-    71,
-    95,
-    67,
-    77,
-    68,
-    0,
-    0,
-    0,
-    0,
-    0,
-    0
-  ]);
-  const cs = xorChecksum$3(body);
-  return Buffer.concat([body, Buffer.from([cs])]);
-}
-function ipToU32$2(ip2) {
-  const [a, b, c, d] = ip2.split(".").map((x) => parseInt(x, 10));
-  return (a << 24 >>> 0 | b << 16 | c << 8 | d) >>> 0;
-}
-function u32ToIp$2(u) {
-  const a = u >>> 24 & 255;
-  const b = u >>> 16 & 255;
-  const c = u >>> 8 & 255;
-  const d = u & 255;
-  return `${a}.${b}.${c}.${d}`;
-}
-function broadcastByMask$2(ip2, mask) {
-  const ipU = ipToU32$2(ip2);
-  const maskU = ipToU32$2(mask);
-  const bcast = (ipU | ~maskU >>> 0) >>> 0;
-  return u32ToIp$2(bcast);
-}
-function getBroadcastTargets$2(mask) {
-  const nets = os.networkInterfaces();
-  const targets = /* @__PURE__ */ new Set();
-  for (const ifname of Object.keys(nets)) {
-    for (const a of nets[ifname] || []) {
-      const isV4 = a.family === "IPv4" || a.family === 4;
-      if (!isV4) continue;
-      if (a.internal) continue;
-      targets.add(broadcastByMask$2(a.address, mask));
-    }
-  }
-  if (targets.size === 0) targets.add("255.255.255.255");
-  return Array.from(targets);
-}
-function formatMac$1(buf, offset) {
-  return [...buf.slice(offset, offset + 6)].map((b) => b.toString(16).padStart(2, "0")).join(":").toUpperCase();
-}
-function formatIp$1(buf, offset) {
-  return [...buf.slice(offset, offset + 4)].join(".");
-}
-function parsePM100Response$1(msg) {
-  if (msg.length < 46) return null;
-  const tag = msg.slice(0, 6).toString("ascii");
-  if (tag !== "CG_RES") return null;
-  const mac = formatMac$1(msg, 6);
-  const version = `${msg[13]}.${msg[14]}`;
-  const ip2 = formatIp$1(msg, 15);
-  const serverIp = formatIp$1(msg, 19);
-  const subnetMask = formatIp$1(msg, 27);
-  const gateway = formatIp$1(msg, 31);
-  const serverPort = msg.readUInt16BE(35);
-  return { mac, ip: ip2, serverIp, subnetMask, gateway, serverPort, version };
-}
-class PM100Scanner {
-  constructor(onLog, onUdp) {
-    this.onLog = onLog;
-    this.onUdp = onUdp;
-  }
-  socket = null;
-  resendTimer = null;
-  isStopping = false;
-  cmdSocket = null;
-  start() {
-    if (this.socket) {
-      this.onLog("Scan already running (socket exists) - ignored");
-      return;
-    }
-    const socket = dgram.createSocket({ type: "udp4", reuseAddr: true });
-    this.socket = socket;
-    socket.on("error", (err) => {
-      this.onLog(`UDP error: ${err.message}`);
-      this.stop();
-    });
-    socket.on("message", (msg, rinfo) => {
-      const parsed = parsePM100Response$1(msg);
-      if (parsed) {
-        this.onUdp({
-          from: `${rinfo.address}:${rinfo.port}`,
-          size: msg.length,
-          ...parsed
-        });
-      } else {
-        const hex = msg.toString("hex").match(/.{1,2}/g)?.join(" ") ?? "";
-        this.onUdp({
-          from: `${rinfo.address}:${rinfo.port}`,
-          size: msg.length,
-          hex
-        });
-      }
-    });
-    socket.bind(PM100_PORT$2, () => {
-      const packet = buildDiscoveryPacket$1();
-      socket.setBroadcast(true);
-      socket.setRecvBufferSize(1024 * 1024);
-      const targets = getBroadcastTargets$2(SEARCH_MASK);
-      this.onLog(
-        `Scan start: port=${PM100_PORT$2}, mask=${SEARCH_MASK}, targets=${targets.join(", ")}`
-      );
-      this.onLog(
-        `Send ${packet.length} bytes: ${packet.toString("hex").match(/.{1,2}/g)?.join(" ")}`
-      );
-      const sendOnce = () => {
-        const packet2 = buildDiscoveryPacket$1();
-        for (const host of targets) {
-          socket.send(packet2, PM100_PORT$2, host, (err) => {
-            if (err)
-              this.onLog(`Send fail -> ${host}:${PM100_PORT$2} : ${err.message}`);
-            else this.onLog(`Sent -> ${host}:${PM100_PORT$2}`);
-          });
-        }
-      };
-      sendOnce();
-      let count = 1;
-      this.resendTimer = setInterval(() => {
-        count += 1;
-        if (count > 5) {
-          if (this.resendTimer) {
-            clearInterval(this.resendTimer);
-            this.resendTimer = null;
-          }
-          return;
-        }
-        this.onLog(`Resend (${count}/5)`);
-        sendOnce();
-      }, 2e3);
-    });
-  }
-  stop() {
-    if (!this.socket) return;
-    this.isStopping = true;
-    if (this.resendTimer) {
-      clearInterval(this.resendTimer);
-      this.resendTimer = null;
-    }
-    const s = this.socket;
-    this.socket = null;
-    try {
-      s.removeAllListeners();
-      s.close();
-    } catch {
-    }
-    this.onLog("Scan stopped (socket closed)");
-    this.isStopping = false;
-  }
-  sendReset(deviceIp, mac) {
-    const socket = this.ensureCmdSocket();
-    const packet = buildResetPacket(mac);
-    const bcast = broadcastByMask$2(deviceIp, SEARCH_MASK);
-    this.onLog(
-      `Reset TX (broadcast) -> ${bcast}:${PM100_PORT$2} (${packet.length} bytes)`
-    );
-    socket.send(packet, PM100_PORT$2, bcast, (err) => {
-      if (err)
-        this.onLog(
-          `Reset send fail -> ${bcast}:${PM100_PORT$2} : ${err.message}`
-        );
-      else this.onLog(`Reset sent -> ${bcast}:${PM100_PORT$2}`);
-    });
-  }
-  ensureCmdSocket() {
-    if (this.cmdSocket) return this.cmdSocket;
-    const s = dgram.createSocket({ type: "udp4", reuseAddr: true });
-    s.on("error", (err) => {
-      this.onLog(`CMD UDP error: ${err.message}`);
-      try {
-        s.close();
-      } catch {
-      }
-      if (this.cmdSocket === s) this.cmdSocket = null;
-    });
-    s.bind(PM100_PORT$2, "0.0.0.0", () => {
-      s.setBroadcast(true);
-      this.onLog(`CMD socket ready on 0.0.0.0:${PM100_PORT$2}`);
-    });
-    this.cmdSocket = s;
-    return s;
-  }
-}
-function buildResetPacket(macStr) {
-  const mac = Buffer.from(macStr.split(":").map((h) => parseInt(h, 16)));
-  const cmd = Buffer.from("Camguard_Initialize", "ascii");
-  return Buffer.concat([mac, cmd]);
-}
-let scanner = null;
-function send(getWin, channel, payload) {
-  const w = getWin();
-  if (!w) return;
-  w.webContents.send(channel, payload);
-}
-function registerPM100DiscoveryMainIPC(getWin) {
-  const ensureScanner = () => {
-    if (!scanner) {
-      scanner = new PM100Scanner(
-        // ✅ 새 채널로 송신 + (선택) legacy도 같이 송신
-        (line) => {
-          send(getWin, PM100_CHANNELS.discovery.log, line);
-          send(getWin, PM100_CHANNELS.legacy.discoveryLog, line);
-        },
-        (payload) => {
-          send(getWin, PM100_CHANNELS.discovery.udp, payload);
-          send(getWin, PM100_CHANNELS.legacy.discoveryUdp, payload);
-        }
-      );
-    }
-    return scanner;
-  };
-  const scanStartHandler = () => {
-    ensureScanner().start();
-    return true;
-  };
-  const scanStopHandler = () => {
-    if (scanner) scanner.stop();
-    return true;
-  };
-  const resetHandler = (_evt, ip2, mac) => {
-    try {
-      ensureScanner().sendReset(ip2, mac);
-      return true;
-    } catch {
-      return false;
-    }
-  };
-  ipcMain.handle(PM100_CHANNELS.discovery.scanStart, scanStartHandler);
-  ipcMain.handle(PM100_CHANNELS.legacy.discoveryScanStart, scanStartHandler);
-  ipcMain.handle(PM100_CHANNELS.discovery.scanStop, scanStopHandler);
-  ipcMain.handle(PM100_CHANNELS.legacy.discoveryScanStop, scanStopHandler);
-  ipcMain.handle(PM100_CHANNELS.discovery.reset, resetHandler);
-  ipcMain.handle(PM100_CHANNELS.legacy.discoveryReset, resetHandler);
-}
-const FRAME_LEN$1 = 36;
-function ip(buf, off) {
-  return `${buf[off]}.${buf[off + 1]}.${buf[off + 2]}.${buf[off + 3]}`;
-}
-function u16be(buf, off) {
-  return buf[off] << 8 | buf[off + 1];
-}
-function xorChecksum$2(buf) {
-  let x = 0;
-  for (let i = 0; i < buf.length - 1; i++) x ^= buf[i];
-  return x & 255;
-}
-function tryParseFrames(chunk) {
-  const frames = [];
-  let offset = 0;
-  while (offset + FRAME_LEN$1 <= chunk.length) {
-    if (chunk[offset] !== 67 || // 'C'
-    chunk[offset + 1] !== 71 || // 'G'
-    chunk[offset + 2] !== 68 || // 'D'
-    chunk[offset + 3] !== 73 || // 'I'
-    chunk[offset + 4] !== 127) {
-      offset += 1;
-      continue;
-    }
-    const frameBuf = chunk.slice(offset, offset + FRAME_LEN$1);
-    const expected = frameBuf[FRAME_LEN$1 - 1];
-    const actual = xorChecksum$2(frameBuf);
-    if (expected !== actual) {
-      offset += 1;
-      continue;
-    }
-    const deviceIp = ip(frameBuf, 5);
-    const subnet = ip(frameBuf, 9);
-    const gateway = ip(frameBuf, 13);
-    const serverIp = ip(frameBuf, 17);
-    const serverPort = u16be(frameBuf, 21);
-    const sensorNcNo = [
-      frameBuf[23],
-      frameBuf[24],
-      frameBuf[25]
-    ];
-    const sensorEnable = [
-      frameBuf[26],
-      frameBuf[27],
-      frameBuf[28]
-    ];
-    const sensorCheckTime = [
-      frameBuf[29],
-      frameBuf[30],
-      frameBuf[31]
-    ];
-    const sensorStatus = [
-      frameBuf[32],
-      frameBuf[33],
-      frameBuf[34]
-    ];
-    frames.push({
-      deviceIp,
-      subnet,
-      gateway,
-      serverIp,
-      serverPort,
-      sensorNcNo,
-      sensorEnable,
-      sensorCheckTime,
-      sensorStatus,
-      raw: frameBuf
-    });
-    offset += FRAME_LEN$1;
-  }
-  return { frames, rest: chunk.slice(offset) };
-}
-class PM100SetupServer {
-  constructor(onLog, onStatus, onDeviceFrame) {
-    this.onLog = onLog;
-    this.onStatus = onStatus;
-    this.onDeviceFrame = onDeviceFrame;
-  }
-  server = null;
-  port = null;
-  host = null;
-  clients = /* @__PURE__ */ new Set();
-  stopping = null;
-  start(port, host) {
-    if (this.server) {
-      this.onLog(
-        `Start ignored: already running on ${this.host ?? "?"}:${this.port ?? "?"}`
-      );
-      return;
-    }
-    if (this.stopping) {
-      this.onLog("Start ignored: server is stopping (wait close)");
-      return;
-    }
-    this.onLog(`Server start requested: ${host}:${port}`);
-    const server2 = net.createServer((sock) => {
-      this.clients.add(sock);
-      this.onLog(`Client connected: ${sock.remoteAddress}:${sock.remotePort}`);
-      let carry = Buffer.alloc(0);
-      sock.on("data", (buf) => {
-        this.onLog(`RAW RX ${buf.length} bytes`);
-        carry = Buffer.concat([carry, buf]);
-        const { frames, rest } = tryParseFrames(carry);
-        carry = rest;
-        for (const f of frames) this.onDeviceFrame(f);
-      });
-      sock.on("close", () => {
-        this.clients.delete(sock);
-        this.onLog(
-          `Client disconnected: ${sock.remoteAddress}:${sock.remotePort}`
-        );
-        this.onStatus({
-          running: true,
-          port: this.port ?? void 0,
-          host: this.host ?? void 0
-        });
-      });
-      sock.on("error", (e) => this.onLog(`Client error: ${e.message}`));
-      sock.setKeepAlive(true, 5e3);
-      sock.setTimeout(3e3);
-      sock.on("timeout", () => {
-        this.onLog(
-          `Socket timeout -> ${sock.remoteAddress}:${sock.remotePort}`
-        );
-        sock.destroy();
-      });
-    });
-    server2.on("error", (e) => {
-      this.onLog(`Server error: ${e?.message ?? e}`);
-      try {
-        server2.close();
-      } catch {
-      }
-      this.server = null;
-      this.port = null;
-      this.host = null;
-      this.onStatus({ running: false });
-    });
-    server2.listen(port, "0.0.0.0", () => {
-      this.server = server2;
-      this.port = port;
-      this.host = host;
-      this.onLog(
-        `Server listening on 0.0.0.0:${port} (requested host=${host})`
-      );
-      this.onStatus({ running: true, port, host });
-    });
-  }
-  // ✅ Stop을 완료까지 기다릴 수 있게
-  async stopAsync() {
-    if (this.stopping) return this.stopping;
-    if (!this.server) {
-      this.onLog("Stop ignored: server not running");
-      this.onStatus({ running: false });
-      return;
-    }
-    this.onLog("Server stop requested");
-    const s = this.server;
-    this.stopping = new Promise((resolve) => {
-      for (const sock of this.clients) {
-        try {
-          sock.end();
-          setTimeout(() => {
-            try {
-              sock.destroy();
-            } catch {
-            }
-          }, 500);
-        } catch {
-        }
-      }
-      this.clients.clear();
-      try {
-        s.close(() => {
-          this.server = null;
-          this.port = null;
-          this.host = null;
-          this.onLog("Server stopped");
-          this.onStatus({ running: false });
-          const done = this.stopping;
-          this.stopping = null;
-          resolve();
-        });
-      } catch {
-        this.server = null;
-        this.port = null;
-        this.host = null;
-        this.onLog("Server stopped");
-        this.onStatus({ running: false });
-        this.stopping = null;
-        resolve();
-      }
-    });
-    return this.stopping;
-  }
-  status() {
-    return {
-      running: !!this.server,
-      port: this.port ?? void 0,
-      host: this.host ?? void 0
-    };
-  }
-  getConnectedIps() {
-    const ips = /* @__PURE__ */ new Set();
-    for (const s of this.clients) {
-      const ra = s.remoteAddress ?? "";
-      const ip2 = ra.startsWith("::ffff:") ? ra.slice(7) : ra;
-      if (ip2) ips.add(ip2);
-    }
-    return Array.from(ips);
-  }
-}
-let server = null;
-function getLocalIPv4s$1() {
-  const nets = os.networkInterfaces();
-  const ips = /* @__PURE__ */ new Set();
-  for (const ifname of Object.keys(nets)) {
-    for (const a of nets[ifname] || []) {
-      const isV4 = a.family === "IPv4" || a.family === 4;
-      if (!isV4) continue;
-      if (a.internal) continue;
-      ips.add(a.address);
-    }
-  }
-  return Array.from(ips);
-}
-function getWC(getWin) {
-  const w = getWin();
-  if (!w) throw new Error("Window not ready");
-  return w.webContents;
-}
-function registerPM100SetupMainIPC(getWin) {
-  const ensureServer = () => {
-    const wc = getWC(getWin);
-    if (!server) {
-      server = new PM100SetupServer(
-        // log
-        (line) => {
-          wc.send(PM100_CHANNELS.setup.log, line);
-          wc.send(PM100_CHANNELS.legacy.setupLog, line);
-        },
-        // status
-        (s) => {
-          wc.send(PM100_CHANNELS.setup.status, s);
-          wc.send(PM100_CHANNELS.legacy.setupStatus, s);
-        },
-        // device
-        (f) => {
-          wc.send(PM100_CHANNELS.setup.device, f);
-          wc.send(PM100_CHANNELS.legacy.setupDevice, f);
-        }
-      );
-    }
-    return { wc, server };
-  };
-  const startHandler = (_evt, port, host) => {
-    const { server: server2 } = ensureServer();
-    server2.start(port, host);
-    return true;
-  };
-  ipcMain.handle(PM100_CHANNELS.setup.start, startHandler);
-  ipcMain.handle(PM100_CHANNELS.legacy.setupStart, startHandler);
-  const stopHandler = async () => {
-    if (server) {
-      await server.stopAsync();
-      server = null;
-    }
-    const wc = getWC(getWin);
-    const stopped = { running: false };
-    wc.send(PM100_CHANNELS.setup.status, stopped);
-    wc.send(PM100_CHANNELS.legacy.setupStatus, stopped);
-    return true;
-  };
-  ipcMain.handle(PM100_CHANNELS.setup.stop, stopHandler);
-  ipcMain.handle(PM100_CHANNELS.legacy.setupStop, stopHandler);
-  const statusHandler = () => {
-    return server ? server.status() : { running: false };
-  };
-  ipcMain.handle(PM100_CHANNELS.setup.status, statusHandler);
-  ipcMain.handle(PM100_CHANNELS.legacy.setupStatus, statusHandler);
-  const ipsHandler = () => getLocalIPv4s$1();
-  ipcMain.handle(PM100_CHANNELS.setup.getLocalIPv4s, ipsHandler);
-  ipcMain.handle(PM100_CHANNELS.legacy.setupGetLocalIPv4s, ipsHandler);
-  const connectedIpsHandler = () => server ? server.getConnectedIps() : [];
-  ipcMain.handle(PM100_CHANNELS.setup.getConnectedIps, connectedIpsHandler);
-  ipcMain.handle(
-    PM100_CHANNELS.legacy.setupGetConnectedIps,
-    connectedIpsHandler
-  );
-}
-async function stopPM100SetupServer() {
-  if (server) {
-    await server.stopAsync();
-    server = null;
-  }
-}
 const PM100_PORT$1 = 1500;
 function xorChecksum$1(buf) {
   let x = 0;
@@ -624,8 +30,8 @@ function buildDiscoveryPacket() {
   const cs = xorChecksum$1(body);
   return Buffer.concat([body, Buffer.from([cs])]);
 }
-function ipToU32$1(ip2) {
-  const [a, b, c, d] = ip2.split(".").map((x) => parseInt(x, 10));
+function ipToU32$1(ip) {
+  const [a, b, c, d] = ip.split(".").map((x) => parseInt(x, 10));
   return (a << 24 >>> 0 | b << 16 | c << 8 | d) >>> 0;
 }
 function u32ToIp$1(u) {
@@ -635,8 +41,8 @@ function u32ToIp$1(u) {
   const d = u & 255;
   return `${a}.${b}.${c}.${d}`;
 }
-function broadcastByMask$1(ip2, mask) {
-  const ipU = ipToU32$1(ip2);
+function broadcastByMask$1(ip, mask) {
+  const ipU = ipToU32$1(ip);
   const maskU = ipToU32$1(mask);
   const bcast = (ipU | ~maskU >>> 0) >>> 0;
   return u32ToIp$1(bcast);
@@ -680,7 +86,7 @@ function parsePM100Response(msg) {
   const version = `${verMajor}.${verMinor}`;
   o += 2;
   blockLen += 2;
-  const ip2 = formatIp(msg, o);
+  const ip = formatIp(msg, o);
   o += 4;
   blockLen += 4;
   const subnetMask = formatIp(msg, o);
@@ -725,7 +131,7 @@ function parsePM100Response(msg) {
     mac,
     cmd,
     version,
-    ip: ip2,
+    ip,
     subnetMask,
     gateway,
     serverIp,
@@ -891,8 +297,8 @@ function createPM100UdpScanner(events) {
   return { start, stop, isRunning: () => running };
 }
 const PM100_PORT = 1500;
-function ipToU32(ip2) {
-  const [a, b, c, d] = ip2.split(".").map((x) => parseInt(x, 10));
+function ipToU32(ip) {
+  const [a, b, c, d] = ip.split(".").map((x) => parseInt(x, 10));
   return (a << 24 >>> 0 | b << 16 | c << 8 | d) >>> 0;
 }
 function u32ToIp(u) {
@@ -902,8 +308,8 @@ function u32ToIp(u) {
   const d = u & 255;
   return `${a}.${b}.${c}.${d}`;
 }
-function broadcastByMask(ip2, mask) {
-  const ipU = ipToU32(ip2);
+function broadcastByMask(ip, mask) {
+  const ipU = ipToU32(ip);
   const maskU = ipToU32(mask);
   const bcast = (ipU | ~maskU >>> 0) >>> 0;
   return u32ToIp(bcast);
@@ -997,17 +403,17 @@ function registerPM100ToolUdpMainIPC(getWin) {
       win2.webContents.send("pm100:udp:stopped", payload);
     }
   };
-  const scanner2 = createPM100UdpScanner(events);
+  const scanner = createPM100UdpScanner(events);
   ipcMain.handle(
     "pm100:udp:scanStart",
     async (_evt, opts) => {
       try {
-        await scanner2.start(opts);
+        await scanner.start(opts);
         return true;
       } catch (e) {
         events.log(`scanStart failed: ${String(e?.message || e)}`);
         try {
-          scanner2.stop("scanStart failed");
+          scanner.stop("scanStart failed");
         } catch {
         }
         return false;
@@ -1016,7 +422,7 @@ function registerPM100ToolUdpMainIPC(getWin) {
   );
   ipcMain.handle("pm100:udp:scanStop", async () => {
     try {
-      scanner2.stop("manual stop");
+      scanner.stop("manual stop");
       return true;
     } catch (e) {
       events.log(`scanStop failed: ${String(e?.message || e)}`);
@@ -1036,131 +442,6 @@ function registerPM100ToolUdpMainIPC(getWin) {
       console.error("pm100:udp:sendUdp error:", e, "args=", args);
       return false;
     }
-  });
-}
-let logWin = null;
-const MAX_LINES = 5e3;
-let lines = [];
-function pushLine(line) {
-  lines.push(line);
-  if (lines.length > MAX_LINES) lines = lines.slice(lines.length - MAX_LINES);
-}
-function broadcast(getMainWin) {
-  const payload = lines.join("\n");
-  const main = getMainWin();
-  if (main && !main.isDestroyed()) {
-    main.webContents.send(PM100_CHANNELS.tool.log.updated, payload);
-  }
-  if (logWin && !logWin.isDestroyed()) {
-    logWin.webContents.send(PM100_CHANNELS.tool.log.updated, payload);
-  }
-}
-function attachTopPolicy(win2) {
-  const setTop = (on) => {
-    if (win2.isDestroyed()) return;
-    if (on) win2.setAlwaysOnTop(true, "floating");
-    else win2.setAlwaysOnTop(false);
-  };
-  setTop(true);
-  const onMove = () => setTop(true);
-  const onWinFocus = () => setTop(true);
-  const onWinShow = () => setTop(true);
-  const onWinBlur = () => setTop(false);
-  win2.on("move", onMove);
-  win2.on("focus", onWinFocus);
-  win2.on("show", onWinShow);
-  win2.on("blur", onWinBlur);
-  const onAnyWindowBlur = () => {
-    setTimeout(() => {
-      const focused = BrowserWindow.getFocusedWindow();
-      if (!focused) {
-        setTop(false);
-      }
-    }, 0);
-  };
-  const onAnyWindowFocus = () => {
-    setTop(true);
-  };
-  app.on("browser-window-blur", onAnyWindowBlur);
-  app.on("browser-window-focus", onAnyWindowFocus);
-  win2.once("closed", () => {
-    app.removeListener("browser-window-blur", onAnyWindowBlur);
-    app.removeListener("browser-window-focus", onAnyWindowFocus);
-  });
-  return { setTop };
-}
-let mainFocusHooked = false;
-function registerPM100ToolLogMainIPC(getMainWin, preloadPath) {
-  if (!mainFocusHooked) {
-    mainFocusHooked = true;
-    const hookMainFocus = () => {
-      const main = getMainWin();
-      if (!main || main.isDestroyed()) return;
-      main.on("focus", () => {
-        if (!logWin || logWin.isDestroyed()) return;
-        logWin.setAlwaysOnTop(true, "floating");
-      });
-    };
-    hookMainFocus();
-    app.on("browser-window-created", hookMainFocus);
-  }
-  ipcMain.on(PM100_CHANNELS.tool.log.append, (_evt, line) => {
-    if (typeof line !== "string") return;
-    pushLine(line);
-    broadcast(getMainWin);
-  });
-  ipcMain.handle(PM100_CHANNELS.tool.log.clear, () => {
-    lines = [];
-    broadcast(getMainWin);
-    return true;
-  });
-  ipcMain.handle(PM100_CHANNELS.tool.log.getAll, () => lines.join("\n"));
-  ipcMain.handle(PM100_CHANNELS.tool.log.openWindow, async () => {
-    if (logWin && !logWin.isDestroyed()) {
-      logWin.setAlwaysOnTop(true, "floating");
-      logWin.show();
-      logWin.focus();
-      logWin.moveTop();
-      return true;
-    }
-    logWin = new BrowserWindow({
-      width: 500,
-      height: 500,
-      title: "PM100 Log",
-      parent: void 0,
-      // ✅ top 창은 parent 없이가 안정적
-      show: false,
-      // ✅ 로드 후 show
-      acceptFirstMouse: true,
-      webPreferences: {
-        preload: preloadPath
-      }
-    });
-    const { setTop } = attachTopPolicy(logWin);
-    logWin.setVisibleOnAllWorkspaces(true);
-    logWin.setFullScreenable(false);
-    const devUrl = process.env.VITE_DEV_SERVER_URL;
-    if (devUrl) {
-      await logWin.loadURL(`${devUrl}#/pm100-log`);
-    } else {
-      await logWin.loadFile(path.join(process.cwd(), "index.html"), {
-        hash: "/pm100-log"
-      });
-    }
-    if (!logWin.isDestroyed()) {
-      logWin.show();
-      logWin.focus();
-      logWin.moveTop();
-      setTop(true);
-      logWin.webContents.send(
-        PM100_CHANNELS.tool.log.updated,
-        lines.join("\n")
-      );
-    }
-    logWin.once("closed", () => {
-      logWin = null;
-    });
-    return true;
   });
 }
 function toHexSpaced(buf, maxBytes = 512) {
@@ -1187,8 +468,8 @@ function buildCgdiPacket(cmd, data) {
 function formatIpBytes(b, off) {
   return `${b[off]}.${b[off + 1]}.${b[off + 2]}.${b[off + 3]}`;
 }
-function ipToKey(ip2) {
-  const parts = ip2.split(".").map((n) => parseInt(n, 10));
+function ipToKey(ip) {
+  const parts = ip.split(".").map((n) => parseInt(n, 10));
   const u = (parts[0] << 24 >>> 0 | parts[1] << 16 | parts[2] << 8 | parts[3]) >>> 0;
   return u % 9e5 + 1e5;
 }
@@ -1254,7 +535,7 @@ function normalizeRemoteIp(addr) {
   return s;
 }
 function createPM100ToolTcpServer(events) {
-  let server2 = null;
+  let server = null;
   let running = false;
   let boundPort;
   let boundHost;
@@ -1267,7 +548,7 @@ function createPM100ToolTcpServer(events) {
     if (running) return true;
     return await new Promise((resolve) => {
       try {
-        server2 = net.createServer((socket) => {
+        server = net.createServer((socket) => {
           sockets.add(socket);
           const remoteIp = normalizeRemoteIp(socket.remoteAddress);
           const remote = `${remoteIp}:${socket.remotePort}`;
@@ -1275,16 +556,16 @@ function createPM100ToolTcpServer(events) {
           events.log(`TCP client connected: ${remote}`);
           socket.on("close", () => {
             sockets.delete(socket);
-            for (const [ip2, s] of socketByDeviceIp.entries()) {
-              if (s === socket) socketByDeviceIp.delete(ip2);
+            for (const [ip, s] of socketByDeviceIp.entries()) {
+              if (s === socket) socketByDeviceIp.delete(ip);
             }
             events.client({ type: "close", remote });
             events.log(`TCP client closed: ${remote}`);
           });
           socket.on("error", (e) => {
             sockets.delete(socket);
-            for (const [ip2, s] of socketByDeviceIp.entries()) {
-              if (s === socket) socketByDeviceIp.delete(ip2);
+            for (const [ip, s] of socketByDeviceIp.entries()) {
+              if (s === socket) socketByDeviceIp.delete(ip);
             }
             events.log(
               `TCP socket error ${remote}: ${String(e?.message ?? e)}`
@@ -1315,20 +596,20 @@ ${hex}`);
             }
           });
         });
-        server2.on("error", (e) => {
+        server.on("error", (e) => {
           events.log(`TCP server error: ${String(e?.message ?? e)}`);
           try {
-            server2?.close();
+            server?.close();
           } catch {
           }
-          server2 = null;
+          server = null;
           running = false;
           boundPort = void 0;
           boundHost = void 0;
           emitStatus();
           resolve(false);
         });
-        server2.listen(port, host, () => {
+        server.listen(port, host, () => {
           running = true;
           boundPort = port;
           boundHost = host;
@@ -1351,8 +632,8 @@ ${hex}`);
     }
     sockets.clear();
     socketByDeviceIp.clear();
-    const s = server2;
-    server2 = null;
+    const s = server;
+    server = null;
     if (!s) {
       running = false;
       boundPort = void 0;
@@ -1385,11 +666,11 @@ ${hex}`);
     return { running, port: boundPort, host: boundHost };
   }
   async function sendToDevice(deviceIpStr, cmd, data) {
-    const ip2 = String(deviceIpStr ?? "").trim();
-    if (!ip2) return false;
-    const sock = socketByDeviceIp.get(ip2);
+    const ip = String(deviceIpStr ?? "").trim();
+    if (!ip) return false;
+    const sock = socketByDeviceIp.get(ip);
     if (!sock || sock.destroyed) {
-      events.log(`TCP send failed: no active socket for device ${ip2}`);
+      events.log(`TCP send failed: no active socket for device ${ip}`);
       return false;
     }
     const packet = buildCgdiPacket(cmd, data);
@@ -1398,19 +679,19 @@ ${hex}`);
         sock.write(packet, (err) => {
           if (err) {
             events.log(
-              `TCP send error ${ip2}: ${String(err?.message ?? err)}`
+              `TCP send error ${ip}: ${String(err?.message ?? err)}`
             );
             resolve(false);
             return;
           }
           events.log(
-            `TCP TX ${ip2} (${packet.length} bytes)
+            `TCP TX ${ip} (${packet.length} bytes)
 ${toHexSpaced(packet)}`
           );
           resolve(true);
         });
       } catch (e) {
-        events.log(`TCP send exception ${ip2}: ${String(e?.message ?? e)}`);
+        events.log(`TCP send exception ${ip}: ${String(e?.message ?? e)}`);
         resolve(false);
       }
     });
@@ -1478,10 +759,10 @@ function registerPM100ToolTcpMainIPC(getWin) {
     "pm100:tcp:send",
     async (_evt, args) => {
       try {
-        const ip2 = String(args?.deviceIpStr ?? "").trim();
+        const ip = String(args?.deviceIpStr ?? "").trim();
         const cmd = Number(args?.cmd) & 255;
         const data = Array.isArray(args?.data) ? args.data : void 0;
-        const ok = await tcp.sendToDevice(ip2, cmd, data);
+        const ok = await tcp.sendToDevice(ip, cmd, data);
         return !!ok;
       } catch (e) {
         events.log(`tcp:send failed: ${String(e?.message ?? e)}`);
@@ -1508,7 +789,6 @@ const __filename$1 = fileURLToPath(import.meta.url);
 const __dirname$1 = path.dirname(__filename$1);
 let win = null;
 function createWindow() {
-  const preloadPath = path.join(__dirname$1, "preload.mjs");
   win = new BrowserWindow({
     width: 1140,
     height: 800,
@@ -1521,24 +801,17 @@ function createWindow() {
   win.on("closed", () => {
     win = null;
   });
-  registerPM100ToolLogMainIPC(() => win, preloadPath);
   const devUrl = process.env.VITE_DEV_SERVER_URL;
   if (devUrl) win.loadURL(devUrl);
   else win.loadFile(path.join(process.cwd(), "index.html"));
 }
 app.whenReady().then(() => {
   createWindow();
-  registerPM100DiscoveryMainIPC(() => win);
-  registerPM100SetupMainIPC(() => win);
   registerPM100ToolUdpMainIPC(() => win);
   registerPM100ToolTcpMainIPC(() => win);
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
-});
-app.on("window-all-closed", async () => {
-  await stopPM100SetupServer();
-  if (process.platform !== "darwin") app.quit();
 });
 process.on("uncaughtException", (err) => {
   console.error("MAIN CRASH:", err);

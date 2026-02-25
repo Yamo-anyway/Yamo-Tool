@@ -1,6 +1,6 @@
 // src/Launcher.tsx
-import React from "react";
-import "./styles.css";
+import styled from "@emotion/styled";
+import { Button } from "@mui/material";
 
 type Slot = {
   title: string;
@@ -21,38 +21,39 @@ export default function Launcher() {
     onClick: () => (window.location.hash = "#/pm100-tool?slot=0"),
   };
 
-  // ✅ 19번: PM100 Discovery (기존)
-  slots[18] = {
-    title: "PM100 Discovery",
-    enabled: true,
-    onClick: () => (window.location.hash = "#/pm100-discovery?slot=18"),
-  };
-
-  // ✅ 20번: PM100 Setup (기존)
-  slots[19] = {
-    title: "PM100 Setup",
-    enabled: true,
-    onClick: () => (window.location.hash = "#/pm100-setup?slot=19"),
-  };
-
   return (
-    <div className="launcher">
-      <div className="grid">
-        {slots.map((s, idx) => (
-          <button
-            key={idx}
-            className={`slot ${s.enabled ? "" : "disabled"}`}
-            disabled={!s.enabled}
-            onClick={s.onClick}
-            title={s.enabled ? s.title : "Not available"}
-          >
-            <div className="slotInner">
-              <div className="slotIcon" />
-              <div className="slotTitle">{s.title}</div>
-            </div>
-          </button>
-        ))}
-      </div>
+    <div
+      style={{
+        minWidth: "950px",
+        maxWidth: "950px",
+        width: "950px",
+        minHeight: "700px",
+        maxHeight: "700px",
+        height: "700px",
+        padding: "30px",
+      }}
+    >
+      {slots?.map((s, idx) => {
+        if (s.enabled) {
+          return (
+            <StyledButton
+              key={idx}
+              onClick={s.onClick}
+              title={s.enabled ? s.title : "Not available"}
+            >
+              {s.title}
+            </StyledButton>
+          );
+        }
+      })}
     </div>
   );
 }
+
+const StyledButton = styled(Button)`
+  border: 1px solid #ffffff;
+  text-transform: none;
+  margin-right: 10px;
+
+  height: 40px;
+`;
