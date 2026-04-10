@@ -50,17 +50,22 @@ function broadcastByMask$1(ip, mask) {
 function getBroadcastTargets$1() {
   const nets = os.networkInterfaces();
   const targets = /* @__PURE__ */ new Set();
+  targets.add("255.255.255.255");
   for (const ifname of Object.keys(nets)) {
     for (const a of nets[ifname] || []) {
       const isV4 = a.family === "IPv4" || a.family === 4;
       if (!isV4) continue;
       if (a.internal) continue;
+      const address = a.address;
       const mask = a.netmask;
-      if (!mask) continue;
-      targets.add(broadcastByMask$1(a.address, mask));
+      if (!address || !mask) continue;
+      const bcast = broadcastByMask$1(address, mask);
+      targets.add(bcast);
     }
   }
-  if (targets.size === 0) targets.add("255.255.255.255");
+  for (let x = 0; x <= 255; x++) {
+    targets.add(`192.168.${x}.255`);
+  }
   return Array.from(targets);
 }
 function formatMac(msg, offset) {
