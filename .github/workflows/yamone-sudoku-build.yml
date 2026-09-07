@@ -1,0 +1,55 @@
+name: Build Yamone Sudoku APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ "yamone-sudoku-v0.1" ]
+    paths:
+      - "projects/YamoneSudoku/**"
+      - ".github/workflows/yamone-sudoku-build.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build-debug-apk:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v6
+
+      - name: Restore Yamone Sudoku project
+        shell: bash
+        run: |
+          mkdir -p build-yamone-sudoku
+          base64 -d projects/YamoneSudoku/source.tar.gz.b64 > /tmp/yamone-sudoku.tar.gz
+          tar -xzf /tmp/yamone-sudoku.tar.gz -C build-yamone-sudoku --strip-components=1
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
+        with:
+          packages: "platform-tools platforms;android-37 build-tools;36.0.0"
+
+      - name: Set up Gradle 9.6
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: "9.6.0"
+
+      - name: Build debug APK
+        working-directory: build-yamone-sudoku
+        run: gradle :app:assembleDebug --no-daemon --stacktrace
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v5
+        with:
+          name: YamoneSudoku-V0.1-debug
+          path: build-yamone-sudoku/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14
