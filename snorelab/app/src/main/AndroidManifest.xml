@@ -18,7 +18,7 @@
     <application
         android:allowBackup="false"
         android:fullBackupContent="false"
-        android:label="꿀잠 Lab"
+        android:label="${appLabel}"
         android:theme="@style/Theme.SnoreLab"
         android:usesCleartextTraffic="false"
         android:icon="@drawable/ic_launcher_foreground">
