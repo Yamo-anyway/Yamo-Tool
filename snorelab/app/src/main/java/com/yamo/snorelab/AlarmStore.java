@@ -21,17 +21,23 @@ public final class AlarmStore {
         public long id = System.currentTimeMillis();
         public int hour = 7;
         public int minute = 0;
-        public String label = "일어날 시간입니다";
+        public String label = "알람";
         public boolean enabled = true;
         // Monday=0 ... Sunday=6. No selected day means one-time alarm.
         public final boolean[] days = new boolean[7];
-        public String skipDate = ""; // yyyy-MM-dd, only the next matching occurrence
+        public String skipDate = "";
         public int retryMinutes = 5;
-        public int retryCount = 3; // additional retries; -1 = unlimited
-        public boolean ttsEnabled = true;
-        public String voiceStyle = "FEMALE"; // device TTS with pitch styling
-        public String soundStyle = "STRONG"; // STRONG / PULSE / EXTREME
-        public boolean shakeToStop = true;
+        public int retryCount = 3;
+
+        // Exactly one wake method is active: SOUND or TTS.
+        public String alertMode = "SOUND";
+        public String soundStyle = "STRONG";
+        public String speechText = "일어날 시간입니다";
+        public String voiceStyle = "FEMALE";
+
+        // Shake is an optional additional dismiss method. The visible stop button always remains.
+        public boolean shakeToStop = false;
+        public int shakeCount = 3;
 
         JSONObject toJson() throws Exception {
             JSONObject o = new JSONObject();
@@ -46,29 +52,38 @@ public final class AlarmStore {
             o.put("skipDate", skipDate);
             o.put("retryMinutes", retryMinutes);
             o.put("retryCount", retryCount);
-            o.put("ttsEnabled", ttsEnabled);
-            o.put("voiceStyle", voiceStyle);
+            o.put("alertMode", alertMode);
             o.put("soundStyle", soundStyle);
+            o.put("speechText", speechText);
+            o.put("voiceStyle", voiceStyle);
             o.put("shakeToStop", shakeToStop);
+            o.put("shakeCount", shakeCount);
+            // Kept only for compatibility with V0.2/V0.3 stored records.
+            o.put("ttsEnabled", "TTS".equals(alertMode));
             return o;
         }
 
         static Item fromJson(JSONObject o) {
             Item a = new Item();
             a.id = o.optLong("id", System.currentTimeMillis());
-            a.hour = o.optInt("hour", 7);
-            a.minute = o.optInt("minute", 0);
-            a.label = o.optString("label", "일어날 시간입니다");
+            a.hour = clamp(o.optInt("hour", 7), 0, 23);
+            a.minute = clamp(o.optInt("minute", 0), 0, 59);
+            a.label = o.optString("label", "알람");
             a.enabled = o.optBoolean("enabled", true);
             JSONArray d = o.optJSONArray("days");
             if (d != null) for (int i = 0; i < Math.min(7, d.length()); i++) a.days[i] = d.optBoolean(i, false);
             a.skipDate = o.optString("skipDate", "");
             a.retryMinutes = Math.max(1, o.optInt("retryMinutes", 5));
             a.retryCount = o.optInt("retryCount", 3);
-            a.ttsEnabled = o.optBoolean("ttsEnabled", true);
-            a.voiceStyle = o.optString("voiceStyle", "FEMALE");
+
+            // Old versions could play sound + TTS together. For migration we keep the audible alarm safely as SOUND.
+            a.alertMode = o.has("alertMode") ? o.optString("alertMode", "SOUND") : "SOUND";
+            if (!"TTS".equals(a.alertMode)) a.alertMode = "SOUND";
             a.soundStyle = o.optString("soundStyle", "STRONG");
-            a.shakeToStop = o.optBoolean("shakeToStop", true);
+            a.speechText = o.optString("speechText", o.optString("label", "일어날 시간입니다"));
+            a.voiceStyle = o.optString("voiceStyle", "FEMALE");
+            a.shakeToStop = o.optBoolean("shakeToStop", false);
+            a.shakeCount = clamp(o.optInt("shakeCount", 3), 3, 10);
             return a;
         }
 
@@ -118,5 +133,9 @@ public final class AlarmStore {
         try { for (Item a : list) arr.put(a.toJson()); } catch (Exception ignored) {}
         SharedPreferences p = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
         p.edit().putString(KEY, arr.toString()).apply();
+    }
+
+    private static int clamp(int value, int min, int max) {
+        return Math.max(min, Math.min(max, value));
     }
 }
