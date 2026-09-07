@@ -1,6 +1,7 @@
 package com.yamo.snorelab;
 
 import android.content.Context;
+import android.content.SharedPreferences;
 import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.RectF;
@@ -18,9 +19,11 @@ public class SnoreTimelineView extends View {
 
     public SnoreTimelineView(Context context) {
         super(context);
-        base.setColor(0xFF33425B);
-        event.setColor(0xFF6D72FF);
-        strong.setColor(0xFFFF7D8D);
+        SharedPreferences prefs = context.getSharedPreferences(SleepRecorderService.PREFS, Context.MODE_PRIVATE);
+        boolean pink = "pink".equals(prefs.getString("yamone_theme", "mint"));
+        base.setColor(pink ? 0xFFFFE5ED : 0xFFDDF3EB);
+        event.setColor(pink ? 0xFFFF769F : 0xFF56D1B3);
+        strong.setColor(0xFFE75B6D);
         setMinimumHeight(Math.round(dp(84)));
     }
 
@@ -35,8 +38,8 @@ public class SnoreTimelineView extends View {
         super.onDraw(canvas);
         float left = dp(10), right = getWidth() - dp(10);
         float centerY = getHeight() / 2f;
-        float h = dp(5);
-        canvas.drawRoundRect(new RectF(left, centerY - h/2, right, centerY + h/2), h, h, base);
+        float h = dp(6);
+        canvas.drawRoundRect(new RectF(left, centerY - h / 2, right, centerY + h / 2), h, h, base);
         float width = Math.max(1f, right - left);
         for (int i = 0; i < events.length(); i++) {
             JSONObject e = events.optJSONObject(i);
@@ -49,7 +52,7 @@ public class SnoreTimelineView extends View {
             double score = e.optDouble("scoreMax", 0);
             Paint p = score >= 72 ? strong : event;
             float barH = score >= 72 ? dp(28) : dp(18);
-            canvas.drawRoundRect(new RectF(x1, centerY - barH/2, Math.min(right, x2), centerY + barH/2), dp(3), dp(3), p);
+            canvas.drawRoundRect(new RectF(x1, centerY - barH / 2, Math.min(right, x2), centerY + barH / 2), dp(4), dp(4), p);
         }
     }
 
