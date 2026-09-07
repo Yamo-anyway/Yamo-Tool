@@ -41,15 +41,12 @@ public class AlarmRingService extends Service {
     private final Runnable autoStop = () -> stopRinging(false);
     private final Runnable speechLoop = new Runnable() {
         @Override public void run() {
-            if (!ringing || item == null || !item.ttsEnabled || tts == null) return;
-            try { if (audioTrack != null) audioTrack.pause(); } catch (Exception ignored) {}
-            speakLabel(item.label);
-            long hold = Math.min(10_000L, Math.max(3_000L, item.label.length() * 180L));
-            handler.postDelayed(() -> {
-                if (!ringing) return;
-                try { if (audioTrack != null) audioTrack.play(); } catch (Exception ignored) {}
-            }, hold);
-            handler.postDelayed(this, Math.max(12_000L, hold + 6_000L));
+            if (!ringing || item == null || !"TTS".equals(item.alertMode) || tts == null) return;
+            String speech = item.speechText == null ? "" : item.speechText.trim();
+            if (speech.isEmpty()) speech = "일어날 시간입니다";
+            speakText(speech);
+            long hold = Math.min(12_000L, Math.max(3_500L, speech.length() * 190L));
+            handler.postDelayed(this, Math.max(7_000L, hold + 2_500L));
         }
     };
 
@@ -65,6 +62,7 @@ public class AlarmRingService extends Service {
             stopRinging(true);
             return START_NOT_STICKY;
         }
+
         alarmId = intent == null ? -1L : intent.getLongExtra("alarm_id", -1L);
         item = AlarmStore.find(this, alarmId);
         if (item == null) { stopSelf(); return START_NOT_STICKY; }
@@ -78,9 +76,13 @@ public class AlarmRingService extends Service {
         stopMediaOnly();
         ringing = true;
         acquireWakeLock();
-        startSynthSound(item.soundStyle);
+
+        // User chooses exactly one primary alert method.
+        if ("TTS".equals(item.alertMode)) startTts();
+        else startSynthSound(item.soundStyle);
+
+        // Vibration is a local device cue and can accompany either primary method.
         startVibration();
-        startTts();
         handler.removeCallbacks(autoStop);
         handler.postDelayed(autoStop, 60_000L);
     }
@@ -96,9 +98,10 @@ public class AlarmRingService extends Service {
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
 
         Notification.Builder b = Build.VERSION.SDK_INT >= 26 ? new Notification.Builder(this, CHANNEL) : new Notification.Builder(this);
+        String method = "TTS".equals(alarm.alertMode) ? "텍스트 읽기" : "알람음";
         b.setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
-                .setContentTitle(String.format(Locale.KOREAN, "%02d:%02d  알람", alarm.hour, alarm.minute))
-                .setContentText(alarm.label)
+                .setContentTitle(String.format(Locale.KOREAN, "%02d:%02d  %s", alarm.hour, alarm.minute, alarm.label))
+                .setContentText(method)
                 .setCategory(Notification.CATEGORY_ALARM)
                 .setPriority(Notification.PRIORITY_MAX)
                 .setOngoing(true)
@@ -116,8 +119,8 @@ public class AlarmRingService extends Service {
         NotificationChannel ch = new NotificationChannel(CHANNEL, "꿀잠 Lab 알람", NotificationManager.IMPORTANCE_HIGH);
         ch.setDescription("사용자가 설정한 정확 시간 알람");
         ch.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
-        ch.setSound(null, null); // app synthesizes its own original alarm tone locally
-        ch.enableVibration(false); // service controls vibration pattern
+        ch.setSound(null, null);
+        ch.enableVibration(false);
         nm.createNotificationChannel(ch);
     }
 
@@ -172,16 +175,15 @@ public class AlarmRingService extends Service {
     }
 
     private void startTts() {
-        if (!item.ttsEnabled) return;
         tts = new TextToSpeech(getApplicationContext(), status -> {
-            if (status != TextToSpeech.SUCCESS || !ringing || item == null) return;
+            if (status != TextToSpeech.SUCCESS || !ringing || item == null || !"TTS".equals(item.alertMode)) return;
             tts.setSpeechRate(0.95f);
             tts.setPitch("MALE".equals(item.voiceStyle) ? 0.82f : 1.12f);
-            handler.postDelayed(speechLoop, 1800L);
+            handler.postDelayed(speechLoop, 400L);
         });
     }
 
-    private void speakLabel(String text) {
+    private void speakText(String text) {
         if (tts == null || text == null || text.trim().isEmpty()) return;
         List<String> parts = splitLanguageRuns(text.trim());
         tts.stop();
@@ -189,7 +191,8 @@ public class AlarmRingService extends Service {
         for (String part : parts) {
             if (containsHangul(part)) tts.setLanguage(Locale.KOREAN);
             else tts.setLanguage(Locale.ENGLISH);
-            tts.speak(part, idx == 0 ? TextToSpeech.QUEUE_FLUSH : TextToSpeech.QUEUE_ADD, null, "alarm_" + alarmId + "_" + idx);
+            tts.speak(part, idx == 0 ? TextToSpeech.QUEUE_FLUSH : TextToSpeech.QUEUE_ADD, null,
+                    "alarm_" + alarmId + "_" + idx);
             idx++;
         }
     }
