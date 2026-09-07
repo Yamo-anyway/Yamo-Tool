@@ -60,6 +60,13 @@ public final class AlarmScheduler {
         return scheduleExact(context, retryPendingIntent(context, item.id), trigger, item.id);
     }
 
+    public static boolean scheduleSnooze(Context context, long id, int minutes) {
+        cancelSnooze(context, id);
+        markActive(context, id, true, retryAttempt(context, id));
+        long trigger = System.currentTimeMillis() + Math.max(1, minutes) * 60_000L;
+        return scheduleExact(context, snoozePendingIntent(context, id), trigger, id);
+    }
+
     private static boolean scheduleExact(Context context, PendingIntent operation, long trigger, long itemId) {
         AlarmManager am = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
         if (am == null || !canScheduleExact(context)) return false;
@@ -87,9 +94,16 @@ public final class AlarmScheduler {
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
     }
 
+    private static PendingIntent snoozePendingIntent(Context context, long id) {
+        Intent i = new Intent(context, AlarmReceiver.class).setAction(AlarmReceiver.ACTION_SNOOZE).putExtra("alarm_id", id);
+        return PendingIntent.getBroadcast(context, baseCode(id) + 2, i,
+                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+    }
+
     public static void cancelAll(Context context, long id) {
         cancelRegular(context, id);
         cancelRetry(context, id);
+        cancelSnooze(context, id);
         markActive(context, id, false, 0);
     }
 
@@ -101,6 +115,11 @@ public final class AlarmScheduler {
     public static void cancelRetry(Context context, long id) {
         AlarmManager am = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
         if (am != null) am.cancel(retryPendingIntent(context, id));
+    }
+
+    public static void cancelSnooze(Context context, long id) {
+        AlarmManager am = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
+        if (am != null) am.cancel(snoozePendingIntent(context, id));
     }
 
     public static void markActive(Context context, long id, boolean active, int retryAttempt) {
@@ -122,6 +141,7 @@ public final class AlarmScheduler {
 
     public static void dismiss(Context context, long id) {
         cancelRetry(context, id);
+        cancelSnooze(context, id);
         markActive(context, id, false, 0);
         context.stopService(new Intent(context, AlarmRingService.class));
     }
