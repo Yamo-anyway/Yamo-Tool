@@ -10,8 +10,8 @@ android {
         applicationId 'com.yamo.snorelab'
         minSdk 26
         targetSdk 36
-        versionCode 6
-        versionName '0.3.3-yamone-sleep'
+        versionCode 7
+        versionName '0.3.4-yamone-shell'
         manifestPlaceholders = [appLabel: '야모네']
     }
 
@@ -19,7 +19,7 @@ android {
         debug {
             applicationIdSuffix '.dev'
             versionNameSuffix '-dev'
-            manifestPlaceholders = [appLabel: '야모네 DEV']
+            manifestPlaceholders = [appLabel: '야모네']
         }
         release {
             minifyEnabled false
