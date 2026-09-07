@@ -1,0 +1,12 @@
+<resources>
+    <color name="navy">#0B1324</color>
+    <color name="navy2">#111C31</color>
+    <color name="card">#16243B</color>
+    <color name="primary">#6D72FF</color>
+    <color name="primary2">#8B8FFF</color>
+    <color name="text">#F5F7FF</color>
+    <color name="muted">#9DA9BF</color>
+    <color name="danger">#FF6E7E</color>
+    <color name="warning">#FFC56D</color>
+    <color name="success">#61D6A8</color>
+</resources>
