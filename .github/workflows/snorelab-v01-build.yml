@@ -1,4 +1,4 @@
-name: Build SnoreLab V0.3 APK
+name: Build SnoreLab V0.3.1 APK
 
 on:
   push:
@@ -51,6 +51,6 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: snorelab-v0.3.0-walking-debug-apk
+          name: snorelab-v0.3.1-alarm-ui-debug-apk
           path: snorelab/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
