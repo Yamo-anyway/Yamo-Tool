@@ -21,7 +21,7 @@ public class SnoreTimelineView extends View {
         base.setColor(0xFF33425B);
         event.setColor(0xFF6D72FF);
         strong.setColor(0xFFFF7D8D);
-        setMinimumHeight(dp(84));
+        setMinimumHeight(Math.round(dp(84)));
     }
 
     public void setData(JSONArray events, long durationMs) {
