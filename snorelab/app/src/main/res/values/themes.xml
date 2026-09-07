@@ -1,9 +1,9 @@
 <resources>
     <style name="Theme.SnoreLab" parent="android:style/Theme.Material.Light.NoActionBar">
         <item name="android:fontFamily">sans</item>
-        <item name="android:windowLightStatusBar">false</item>
-        <item name="android:statusBarColor">#0B1324</item>
-        <item name="android:navigationBarColor">#0B1324</item>
-        <item name="android:windowBackground">#0B1324</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:statusBarColor">#F7FFFB</item>
+        <item name="android:navigationBarColor">#F7FFFB</item>
+        <item name="android:windowBackground">#F7FFFB</item>
     </style>
 </resources>
