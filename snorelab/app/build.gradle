@@ -10,8 +10,8 @@ android {
         applicationId 'com.yamo.snorelab'
         minSdk 26
         targetSdk 36
-        versionCode 4
-        versionName '0.3.1-alarm-ui-test'
+        versionCode 5
+        versionName '0.3.2-map-test'
     }
 
     buildTypes {
@@ -25,4 +25,8 @@ android {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
     }
+}
+
+dependencies {
+    implementation 'org.maplibre.gl:android-sdk:13.4.1'
 }
