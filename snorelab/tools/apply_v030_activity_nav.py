@@ -32,14 +32,5 @@ s = replace_once(
 
 main_path.write_text(s, encoding="utf-8")
 
-alarm_path = Path("snorelab/app/src/main/java/com/yamo/snorelab/AlarmActivity.java")
-a = alarm_path.read_text(encoding="utf-8")
-a = replace_once(
-    a,
-    """        nav.addView(navItem(\"⏰\\n알람\", PRIMARY2, v -> showList()), new LinearLayout.LayoutParams(0, dp(56), 1f));\n        nav.addView(navItem(\"☾\\n수면\", MUTED, v -> { startActivity(new Intent(this, MainActivity.class)); finish(); }), new LinearLayout.LayoutParams(0, dp(56), 1f));\n        nav.addView(navItem(\"⚙\\n설정\", MUTED, v -> { startActivity(new Intent(this, MainActivity.class).putExtra(\"start_screen\", \"settings\")); finish(); }), new LinearLayout.LayoutParams(0, dp(56), 1f));\n""",
-    """        nav.addView(navItem(\"⏰\\n알람\", PRIMARY2, v -> showList()), new LinearLayout.LayoutParams(0, dp(56), 1f));\n        nav.addView(navItem(\"☾\\n수면\", MUTED, v -> { startActivity(new Intent(this, MainActivity.class)); finish(); }), new LinearLayout.LayoutParams(0, dp(56), 1f));\n        nav.addView(navItem(\"🏃\\n활동\", MUTED, v -> { startActivity(new Intent(this, ExerciseActivity.class)); finish(); }), new LinearLayout.LayoutParams(0, dp(56), 1f));\n        nav.addView(navItem(\"⚙\\n설정\", MUTED, v -> { startActivity(new Intent(this, MainActivity.class).putExtra(\"start_screen\", \"settings\")); finish(); }), new LinearLayout.LayoutParams(0, dp(56), 1f));\n""",
-    "alarm activity nav button",
-)
-alarm_path.write_text(a, encoding="utf-8")
-
+# AlarmActivity now owns its four-tab navigation directly (V0.3.1+), so do not patch it here.
 print("Applied SnoreLab V0.3 activity navigation patch")
