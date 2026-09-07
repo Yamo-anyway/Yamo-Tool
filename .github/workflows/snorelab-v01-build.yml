@@ -50,6 +50,24 @@ jobs:
       - name: Apply fixed top and bottom chrome patch
         run: python3 snorelab/tools/apply_v036_fixed_chrome.py
 
+      - name: Prepare clean patched source snapshot
+        shell: bash
+        run: |
+          rm -rf yamone-source
+          mkdir -p yamone-source
+          cp -R snorelab/app yamone-source/app
+          cp snorelab/build.gradle yamone-source/build.gradle
+          cp snorelab/gradle.properties yamone-source/gradle.properties
+          cp snorelab/settings.gradle yamone-source/settings.gradle
+          find yamone-source -type d \( -name build -o -name .gradle \) -prune -exec rm -rf {} + || true
+
+      - name: Upload patched source snapshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: yamone-v0.3.6-patched-source
+          path: yamone-source
+          if-no-files-found: error
+
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
