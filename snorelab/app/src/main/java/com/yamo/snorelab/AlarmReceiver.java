@@ -8,6 +8,7 @@ import android.os.Build;
 public class AlarmReceiver extends BroadcastReceiver {
     public static final String ACTION_FIRE = "com.yamo.snorelab.ALARM_FIRE";
     public static final String ACTION_RETRY = "com.yamo.snorelab.ALARM_RETRY";
+    public static final String ACTION_SNOOZE = "com.yamo.snorelab.ALARM_SNOOZE";
     public static final String ACTION_STOP = "com.yamo.snorelab.ALARM_STOP";
 
     @Override public void onReceive(Context context, Intent intent) {
@@ -33,6 +34,13 @@ public class AlarmReceiver extends BroadcastReceiver {
                 AlarmStore.save(context, item);
             }
 
+            if (item.retryCount != 0) AlarmScheduler.scheduleRetry(context, item);
+            startRinging(context, id);
+            return;
+        }
+
+        if (ACTION_SNOOZE.equals(intent.getAction())) {
+            AlarmScheduler.markActive(context, id, true, AlarmScheduler.retryAttempt(context, id));
             if (item.retryCount != 0) AlarmScheduler.scheduleRetry(context, item);
             startRinging(context, id);
             return;
