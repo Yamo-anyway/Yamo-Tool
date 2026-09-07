@@ -10,8 +10,6 @@ import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileReader;
 import java.io.FileWriter;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -70,8 +68,8 @@ public final class WalkingStore {
 
     public static void writeMeta(File dir, JSONObject meta) {
         if (dir == null || meta == null) return;
-        try {
-            Files.writeString(new File(dir, "session.json").toPath(), meta.toString(2), StandardCharsets.UTF_8);
+        try (BufferedWriter w = new BufferedWriter(new FileWriter(new File(dir, "session.json"), false))) {
+            w.write(meta.toString(2));
         } catch (Exception ignored) {}
     }
 
@@ -79,8 +77,11 @@ public final class WalkingStore {
         if (dir == null) return new JSONObject();
         File f = new File(dir, "session.json");
         if (!f.exists()) return new JSONObject();
-        try {
-            return new JSONObject(Files.readString(f.toPath(), StandardCharsets.UTF_8));
+        try (BufferedReader r = new BufferedReader(new FileReader(f))) {
+            StringBuilder b = new StringBuilder();
+            String line;
+            while ((line = r.readLine()) != null) b.append(line).append('\n');
+            return new JSONObject(b.toString());
         } catch (Exception e) {
             return new JSONObject();
         }
